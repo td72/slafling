@@ -37,7 +37,7 @@ token = "xoxb-..."        # Different workspace token
 channel = "#alerts"
 ```
 
-The Slack Bot Token requires the `chat:write` and `files:write` scopes.
+The Slack Bot Token requires the `chat:write`, `files:write`, and `channels:read` scopes.
 
 ## Usage
 
@@ -59,6 +59,15 @@ slafling -f error.log -t "Check this log"
 
 # Use a profile
 slafling -p random -t "hello random"
+
+# Search for channels by name
+slafling search general
+
+# Search with a profile (uses that profile's token)
+slafling -p work search deploy
+
+# Pick a channel with fzf and copy its ID
+slafling search dev | fzf | cut -f2 | pbcopy
 ```
 
 ## License

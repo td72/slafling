@@ -136,3 +136,74 @@ pub fn upload_file_bytes(
 
     Ok(())
 }
+
+// --- Channel search ---
+
+#[derive(Deserialize)]
+struct ConversationsListResponse {
+    ok: bool,
+    error: Option<String>,
+    #[serde(default)]
+    channels: Vec<Channel>,
+    response_metadata: Option<ResponseMetadata>,
+}
+
+#[derive(Deserialize)]
+struct Channel {
+    id: String,
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct ResponseMetadata {
+    next_cursor: Option<String>,
+}
+
+pub fn search_channels(token: &str, query: &str) -> Result<Vec<(String, String)>> {
+    let query_lower = query.to_lowercase();
+    let mut results = Vec::new();
+    let mut cursor = String::new();
+
+    loop {
+        let mut params = vec![
+            ("limit".to_string(), "200".to_string()),
+            ("exclude_archived".to_string(), "true".to_string()),
+        ];
+        if !cursor.is_empty() {
+            params.push(("cursor".to_string(), cursor.clone()));
+        }
+
+        let mut resp = ureq::post("https://slack.com/api/conversations.list")
+            .header("Authorization", &format!("Bearer {token}"))
+            .send_form(params)
+            .context("failed to call conversations.list")?;
+
+        let body: ConversationsListResponse = resp
+            .body_mut()
+            .read_json()
+            .context("failed to parse conversations.list response")?;
+
+        if !body.ok {
+            let error = body.error.as_deref().unwrap_or("unknown error");
+            bail!("Slack API error (conversations.list): {error}");
+        }
+
+        for ch in &body.channels {
+            if ch.name.to_lowercase().contains(&query_lower) {
+                results.push((ch.name.clone(), ch.id.clone()));
+            }
+        }
+
+        match body
+            .response_metadata
+            .and_then(|m| m.next_cursor)
+            .filter(|c| !c.is_empty())
+        {
+            Some(next) => cursor = next,
+            None => break,
+        }
+    }
+
+    results.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(results)
+}

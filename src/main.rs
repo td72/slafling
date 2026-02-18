@@ -10,14 +10,39 @@ use clap::Parser;
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
-    let cfg = config::load_config()?;
-    let resolved = config::resolve(&cfg, cli.profile.as_deref())?;
+    match cli.command {
+        Some(cli::Command::Search { query }) => run_search(cli.profile.as_deref(), &query),
+        None => run_send(cli.profile.as_deref(), cli.send),
+    }
+}
 
-    let text_needs_stdin = cli.text.as_deref() == Some("");
-    let file_needs_stdin = cli.file.as_deref() == Some("");
+fn run_search(profile: Option<&str>, query: &str) -> Result<()> {
+    let cfg = config::load_config()?;
+    let token = config::resolve_token(&cfg, profile)?;
+
+    let channels = slack::search_channels(&token, query)?;
+
+    if channels.is_empty() {
+        eprintln!("no channels matching '{query}'");
+        std::process::exit(1);
+    }
+
+    for (name, id) in &channels {
+        println!("{name}\t{id}");
+    }
+
+    Ok(())
+}
+
+fn run_send(profile: Option<&str>, send: cli::SendArgs) -> Result<()> {
+    let cfg = config::load_config()?;
+    let resolved = config::resolve(&cfg, profile)?;
+
+    let text_needs_stdin = send.text.as_deref() == Some("");
+    let file_needs_stdin = send.file.as_deref() == Some("");
 
     // No flags at all → treat as implicit -t (stdin text)
-    let (text, file) = if cli.text.is_none() && cli.file.is_none() {
+    let (text, file) = if send.text.is_none() && send.file.is_none() {
         let stdin = std::io::stdin();
         if stdin.is_terminal() {
             bail!("no input provided (use -t, -f, or pipe via stdin)");
@@ -33,7 +58,7 @@ fn main() -> Result<()> {
         }
 
         // Resolve file
-        let file_data = match &cli.file {
+        let file_data = match &send.file {
             Some(path) if path.is_empty() => {
                 // stdin → binary
                 let stdin = std::io::stdin();
@@ -42,7 +67,7 @@ fn main() -> Result<()> {
                 }
                 let mut buf = Vec::new();
                 stdin.lock().read_to_end(&mut buf)?;
-                Some((cli.filename.clone(), buf))
+                Some((send.filename.clone(), buf))
             }
             Some(path) => {
                 // file from path
@@ -60,7 +85,7 @@ fn main() -> Result<()> {
         };
 
         // Resolve text
-        let text = match &cli.text {
+        let text = match &send.text {
             Some(t) if t.is_empty() => {
                 // stdin → text
                 let stdin = std::io::stdin();
