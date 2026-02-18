@@ -66,8 +66,8 @@ pub fn config_path() -> Result<PathBuf> {
 
 pub fn load_config() -> Result<ConfigFile> {
     let path = config_path()?;
-    let content =
-        std::fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let content = std::fs::read_to_string(&path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
     toml::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))
 }
 
