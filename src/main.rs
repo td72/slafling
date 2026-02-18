@@ -47,8 +47,8 @@ fn main() -> Result<()> {
             Some(path) => {
                 // file from path
                 let p = std::path::Path::new(path);
-                let data = std::fs::read(p)
-                    .with_context(|| format!("failed to read file: {path}"))?;
+                let data =
+                    std::fs::read(p).with_context(|| format!("failed to read file: {path}"))?;
                 let name = p
                     .file_name()
                     .context("invalid file path")?
@@ -95,13 +95,7 @@ fn main() -> Result<()> {
             Some(t) => Some(t),
         };
 
-        slack::upload_file_bytes(
-            &resolved.token,
-            &resolved.channel,
-            filename,
-            data,
-            comment,
-        )?;
+        slack::upload_file_bytes(&resolved.token, &resolved.channel, filename, data, comment)?;
     } else {
         // Text-only mode
         let message = text.unwrap_or_default();
@@ -113,4 +107,3 @@ fn main() -> Result<()> {
 
     Ok(())
 }
-
