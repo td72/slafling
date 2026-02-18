@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
     let cfg = config::load_config()?;
-    let resolved = config::resolve(&cfg, cli.profile.as_deref(), cli.channel.as_deref())?;
+    let resolved = config::resolve(&cfg, cli.profile.as_deref())?;
 
     let text_needs_stdin = cli.text.as_deref() == Some("");
     let file_needs_stdin = cli.file.as_deref() == Some("");

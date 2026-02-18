@@ -22,12 +22,12 @@ cargo install --path .   # install locally
 Synchronous CLI app (no async runtime). Four modules orchestrated by `main.rs`:
 
 ```
-main.rs  →  cli.rs     (clap derive: message, --channel, --profile)
-         →  config.rs  (TOML load from ~/.config/slafling/config.toml, 3-layer merge: default → profile → CLI flags)
+main.rs  →  cli.rs     (clap derive: message, --profile)
+         →  config.rs  (TOML load from ~/.config/slafling/config.toml, 2-layer merge: default → profile)
          →  slack.rs   (ureq POST to chat.postMessage with Bearer auth)
 ```
 
-Config resolution priority: CLI flags > profile > default section.
+Config resolution priority: profile > default section. No runtime channel override (safety-first design).
 
 stdin is read when no message argument is given; errors if stdin is a TTY.
 
