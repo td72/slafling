@@ -1,5 +1,7 @@
 # slafling
 
+[日本語](README.ja.md)
+
 Fling messages and files to Slack. Sends text or uploads files to a configured Slack channel via Bot Token. Supports stdin for both text and file input.
 
 ## Install
