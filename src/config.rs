@@ -111,6 +111,26 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
     })
 }
 
+pub fn resolve_token(config: &ConfigFile, profile_name: Option<&str>) -> Result<String> {
+    let mut token = config.default.token.clone();
+
+    if let Some(name) = profile_name {
+        let profile = config
+            .profiles
+            .get(name)
+            .with_context(|| format!("profile '{}' not found in config", name))?;
+        if let Some(t) = &profile.token {
+            token = t.clone();
+        }
+    }
+
+    if token.is_empty() {
+        bail!("token is not configured");
+    }
+
+    Ok(token)
+}
+
 pub fn format_size(bytes: u64) -> String {
     if bytes >= GB {
         format!("{:.1}GB", bytes as f64 / GB as f64)

@@ -37,7 +37,7 @@ token = "xoxb-..."        # 別ワークスペースのトークン
 channel = "#alerts"
 ```
 
-Slack Bot Tokenには `chat:write` と `files:write` のスコープが必要です。
+Slack Bot Tokenには `chat:write`、`files:write`、`channels:read` のスコープが必要です。
 
 ## 使い方
 
@@ -59,6 +59,15 @@ slafling -f error.log -t "このログを確認してください"
 
 # プロファイルを指定
 slafling -p random -t "hello random"
+
+# チャンネル名で検索
+slafling search general
+
+# プロファイル指定で検索 (そのプロファイルのトークンを使用)
+slafling -p work search deploy
+
+# fzfでチャンネルを選んでIDをコピー
+slafling search dev | fzf | cut -f2 | pbcopy
 ```
 
 ## ライセンス
