@@ -17,25 +17,50 @@ fn main() -> Result<()> {
         cli.channel.as_deref(),
     )?;
 
-    let message = match cli.message {
-        Some(m) => m,
-        None => {
-            let stdin = std::io::stdin();
-            if stdin.is_terminal() {
-                bail!("no message provided (pass as argument or pipe via stdin)");
+    if let Some(ref path) = cli.file {
+        // File upload mode
+        let comment = match cli.message {
+            Some(m) => Some(m),
+            None => {
+                let stdin = std::io::stdin();
+                if stdin.is_terminal() {
+                    None
+                } else {
+                    let mut buf = String::new();
+                    stdin.lock().read_to_string(&mut buf)?;
+                    buf.truncate(buf.trim_end().len());
+                    if buf.is_empty() { None } else { Some(buf) }
+                }
             }
-            let mut buf = String::new();
-            stdin.lock().read_to_string(&mut buf)?;
-            buf.truncate(buf.trim_end().len());
-            buf
+        };
+        slack::upload_file(
+            &resolved.token,
+            &resolved.channel,
+            path,
+            comment.as_deref(),
+        )?;
+    } else {
+        // Message mode
+        let message = match cli.message {
+            Some(m) => m,
+            None => {
+                let stdin = std::io::stdin();
+                if stdin.is_terminal() {
+                    bail!("no message provided (pass as argument or pipe via stdin)");
+                }
+                let mut buf = String::new();
+                stdin.lock().read_to_string(&mut buf)?;
+                buf.truncate(buf.trim_end().len());
+                buf
+            }
+        };
+
+        if message.is_empty() {
+            bail!("message is empty");
         }
-    };
 
-    if message.is_empty() {
-        bail!("message is empty");
+        slack::post_message(&resolved.token, &resolved.channel, &message)?;
     }
-
-    slack::post_message(&resolved.token, &resolved.channel, &message)?;
 
     Ok(())
 }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 
 /// Fling messages to Slack
@@ -10,6 +12,10 @@ pub struct Cli {
     /// Target channel (overrides config)
     #[arg(short, long)]
     pub channel: Option<String>,
+
+    /// File to upload
+    #[arg(short, long, value_name = "PATH")]
+    pub file: Option<PathBuf>,
 
     /// Profile name from config file
     #[arg(short, long)]
