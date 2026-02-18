@@ -28,6 +28,10 @@ pub struct SendArgs {
     /// Filename for stdin file upload
     #[arg(short = 'n', long, default_value = "stdin")]
     pub filename: String,
+
+    /// Skip confirmation prompt
+    #[arg(short = 'y', long)]
+    pub yes: bool,
 }
 
 #[derive(Subcommand)]

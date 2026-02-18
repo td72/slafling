@@ -16,6 +16,7 @@ pub struct DefaultConfig {
     pub token: String,
     pub channel: String,
     pub max_file_size: Option<String>,
+    pub confirm: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -23,12 +24,14 @@ pub struct Profile {
     pub token: Option<String>,
     pub channel: Option<String>,
     pub max_file_size: Option<String>,
+    pub confirm: Option<bool>,
 }
 
 pub struct ResolvedConfig {
     pub token: String,
     pub channel: String,
     pub max_file_size: u64,
+    pub confirm: bool,
 }
 
 const KB: u64 = 1_024;
@@ -75,6 +78,7 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
     let mut token = config.default.token.clone();
     let mut channel = config.default.channel.clone();
     let mut max_file_size_str = config.default.max_file_size.clone();
+    let mut confirm = config.default.confirm.unwrap_or(false);
 
     if let Some(name) = profile_name {
         let profile = config
@@ -89,6 +93,9 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
         }
         if profile.max_file_size.is_some() {
             max_file_size_str = profile.max_file_size.clone();
+        }
+        if let Some(c) = profile.confirm {
+            confirm = c;
         }
     }
 
@@ -108,6 +115,7 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
         token,
         channel,
         max_file_size,
+        confirm,
     })
 }
 
