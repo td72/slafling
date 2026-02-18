@@ -4,7 +4,7 @@ mod slack;
 
 use std::io::{IsTerminal, Read};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 
 fn main() -> Result<()> {
@@ -19,6 +19,17 @@ fn main() -> Result<()> {
 
     if let Some(ref path) = cli.file {
         // File upload mode
+        let file_size = std::fs::metadata(path)
+            .with_context(|| format!("failed to read file: {}", path.display()))?
+            .len();
+        if file_size > resolved.max_file_size {
+            bail!(
+                "file size ({}) exceeds limit ({})",
+                format_size(file_size),
+                format_size(resolved.max_file_size),
+            );
+        }
+
         let comment = match cli.message {
             Some(m) => Some(m),
             None => {
@@ -63,4 +74,20 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn format_size(bytes: u64) -> String {
+    const KB: u64 = 1_024;
+    const MB: u64 = 1_048_576;
+    const GB: u64 = 1_073_741_824;
+
+    if bytes >= GB {
+        format!("{:.1}GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1}MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1}KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{bytes}B")
+    }
 }
