@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
@@ -125,23 +123,17 @@ fn complete_upload(
     Ok(())
 }
 
-pub fn upload_file(
+pub fn upload_file_bytes(
     token: &str,
     channel: &str,
-    path: &Path,
+    filename: &str,
+    data: &[u8],
     initial_comment: Option<&str>,
 ) -> Result<()> {
-    let data = std::fs::read(path)
-        .with_context(|| format!("failed to read file: {}", path.display()))?;
-
-    let filename = path
-        .file_name()
-        .context("invalid file path")?
-        .to_string_lossy();
-
-    let (upload_url, file_id) = get_upload_url(token, &filename, data.len() as u64)?;
-    upload_file_content(&upload_url, &data)?;
-    complete_upload(token, &file_id, &filename, channel, initial_comment)?;
+    let (upload_url, file_id) = get_upload_url(token, filename, data.len() as u64)?;
+    upload_file_content(&upload_url, data)?;
+    complete_upload(token, &file_id, filename, channel, initial_comment)?;
 
     Ok(())
 }
+

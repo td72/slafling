@@ -11,65 +11,103 @@ fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
     let cfg = config::load_config()?;
-    let resolved = config::resolve(
-        &cfg,
-        cli.profile.as_deref(),
-        cli.channel.as_deref(),
-    )?;
+    let resolved = config::resolve(&cfg, cli.profile.as_deref(), cli.channel.as_deref())?;
 
-    if let Some(ref path) = cli.file {
-        // File upload mode
-        let file_size = std::fs::metadata(path)
-            .with_context(|| format!("failed to read file: {}", path.display()))?
-            .len();
-        if file_size > resolved.max_file_size {
-            bail!(
-                "file size ({}) exceeds limit ({})",
-                format_size(file_size),
-                format_size(resolved.max_file_size),
-            );
+    let text_needs_stdin = cli.text.as_deref() == Some("");
+    let file_needs_stdin = cli.file.as_deref() == Some("");
+
+    // No flags at all → treat as implicit -t (stdin text)
+    let (mut text, file) = if cli.text.is_none() && cli.file.is_none() {
+        let stdin = std::io::stdin();
+        if stdin.is_terminal() {
+            bail!("no input provided (use -t, -f, or pipe via stdin)");
+        }
+        let mut buf = String::new();
+        stdin.lock().read_to_string(&mut buf)?;
+        buf.truncate(buf.trim_end().len());
+        (Some(buf), None)
+    } else {
+        // Both requesting stdin is ambiguous
+        if text_needs_stdin && file_needs_stdin {
+            bail!("both --text and --file require stdin; provide a value for at least one");
         }
 
-        let comment = match cli.message {
-            Some(m) => Some(m),
-            None => {
+        // Resolve file
+        let file_data = match &cli.file {
+            Some(path) if path.is_empty() => {
+                // stdin → binary
                 let stdin = std::io::stdin();
                 if stdin.is_terminal() {
-                    None
-                } else {
-                    let mut buf = String::new();
-                    stdin.lock().read_to_string(&mut buf)?;
-                    buf.truncate(buf.trim_end().len());
-                    if buf.is_empty() { None } else { Some(buf) }
+                    bail!("--file requires stdin input but stdin is a terminal");
                 }
+                let mut buf = Vec::new();
+                stdin.lock().read_to_end(&mut buf)?;
+                Some((cli.filename.clone(), buf))
             }
+            Some(path) => {
+                // file from path
+                let p = std::path::Path::new(path);
+                let data = std::fs::read(p)
+                    .with_context(|| format!("failed to read file: {path}"))?;
+                let name = p
+                    .file_name()
+                    .context("invalid file path")?
+                    .to_string_lossy()
+                    .into_owned();
+                Some((name, data))
+            }
+            None => None,
         };
-        slack::upload_file(
-            &resolved.token,
-            &resolved.channel,
-            path,
-            comment.as_deref(),
-        )?;
-    } else {
-        // Message mode
-        let message = match cli.message {
-            Some(m) => m,
-            None => {
+
+        // Resolve text
+        let text = match &cli.text {
+            Some(t) if t.is_empty() => {
+                // stdin → text
                 let stdin = std::io::stdin();
                 if stdin.is_terminal() {
-                    bail!("no message provided (pass as argument or pipe via stdin)");
+                    bail!("--text requires stdin input but stdin is a terminal");
                 }
                 let mut buf = String::new();
                 stdin.lock().read_to_string(&mut buf)?;
                 buf.truncate(buf.trim_end().len());
-                buf
+                Some(buf)
             }
+            Some(t) => Some(t.clone()),
+            None => None,
         };
 
+        (text, file_data)
+    };
+
+    if let Some((filename, data)) = &file {
+        // max_file_size check
+        if data.len() as u64 > resolved.max_file_size {
+            bail!(
+                "file size ({}) exceeds limit ({})",
+                format_size(data.len() as u64),
+                format_size(resolved.max_file_size),
+            );
+        }
+
+        // For file upload, empty text means no comment
+        let comment = match text.as_deref() {
+            Some("") | None => None,
+            Some(t) => Some(t),
+        };
+
+        slack::upload_file_bytes(
+            &resolved.token,
+            &resolved.channel,
+            filename,
+            data,
+            comment,
+        )?;
+    } else {
+        // Text-only mode
+        let message = text.take().unwrap_or_default();
         if message.is_empty() {
             bail!("message is empty");
         }
-
         slack::post_message(&resolved.token, &resolved.channel, &message)?;
     }
 
