@@ -67,7 +67,7 @@ fn get_upload_url(token: &str, filename: &str, length: u64) -> Result<(String, S
 }
 
 fn upload_file_content(upload_url: &str, data: &[u8]) -> Result<()> {
-    ureq::put(upload_url)
+    ureq::post(upload_url)
         .content_type("application/octet-stream")
         .send(data)
         .context("failed to upload file content")?;
