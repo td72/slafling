@@ -4,6 +4,12 @@
 
 Fling messages and files to Slack. Sends text or uploads files to a configured Slack channel via Bot Token. Supports stdin for both text and file input.
 
+## Concept
+
+slafling is a **safety-first** Slack CLI tool. Messages always go to pre-configured destinations — there is no ad-hoc channel override flag. This design prevents accidental messages to wrong channels caused by typos or copy-paste mistakes.
+
+Use **profiles** to manage multiple channels. Each profile explicitly maps to a destination, making message routing deliberate and reviewable.
+
 ## Install
 
 ```bash
@@ -53,12 +59,6 @@ slafling -f error.log -t "Check this log"
 
 # Use a profile
 slafling -p random -t "hello random"
-
-# Override channel
-slafling -c "#test" -t "override test"
-
-# Combine
-cat error.log | slafling -t -p other-workspace -c "#incidents"
 ```
 
 ## License

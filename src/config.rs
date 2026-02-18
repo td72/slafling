@@ -71,11 +71,7 @@ pub fn load_config() -> Result<ConfigFile> {
     toml::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))
 }
 
-pub fn resolve(
-    config: &ConfigFile,
-    profile_name: Option<&str>,
-    cli_channel: Option<&str>,
-) -> Result<ResolvedConfig> {
+pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<ResolvedConfig> {
     let mut token = config.default.token.clone();
     let mut channel = config.default.channel.clone();
     let mut max_file_size_str = config.default.max_file_size.clone();
@@ -94,10 +90,6 @@ pub fn resolve(
         if profile.max_file_size.is_some() {
             max_file_size_str = profile.max_file_size.clone();
         }
-    }
-
-    if let Some(c) = cli_channel {
-        channel = c.to_string();
     }
 
     if token.is_empty() {
