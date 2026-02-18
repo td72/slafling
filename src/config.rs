@@ -15,17 +15,44 @@ pub struct ConfigFile {
 pub struct DefaultConfig {
     pub token: String,
     pub channel: String,
+    pub max_file_size: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct Profile {
     pub token: Option<String>,
     pub channel: Option<String>,
+    pub max_file_size: Option<String>,
 }
 
 pub struct ResolvedConfig {
     pub token: String,
     pub channel: String,
+    pub max_file_size: u64,
+}
+
+const DEFAULT_MAX_FILE_SIZE: u64 = 1_073_741_824; // 1GB (Slack limit)
+
+pub fn parse_file_size(s: &str) -> Result<u64> {
+    let s = s.trim();
+    let (num_part, unit) = match s.find(|c: char| c.is_ascii_alphabetic()) {
+        Some(i) => (s[..i].trim(), s[i..].trim().to_ascii_uppercase()),
+        None => (s, String::new()),
+    };
+
+    let num: f64 = num_part
+        .parse()
+        .with_context(|| format!("invalid number in file size: '{s}'"))?;
+
+    let multiplier: u64 = match unit.as_str() {
+        "" | "B" => 1,
+        "KB" | "K" => 1_024,
+        "MB" | "M" => 1_048_576,
+        "GB" | "G" => 1_073_741_824,
+        _ => bail!("unknown file size unit: '{unit}' (use KB, MB, or GB)"),
+    };
+
+    Ok((num * multiplier as f64) as u64)
 }
 
 pub fn config_path() -> Result<PathBuf> {
@@ -47,6 +74,7 @@ pub fn resolve(
 ) -> Result<ResolvedConfig> {
     let mut token = config.default.token.clone();
     let mut channel = config.default.channel.clone();
+    let mut max_file_size_str = config.default.max_file_size.clone();
 
     if let Some(name) = profile_name {
         let profile = config
@@ -58,6 +86,9 @@ pub fn resolve(
         }
         if let Some(c) = &profile.channel {
             channel = c.clone();
+        }
+        if profile.max_file_size.is_some() {
+            max_file_size_str = profile.max_file_size.clone();
         }
     }
 
@@ -72,5 +103,14 @@ pub fn resolve(
         bail!("channel is not configured");
     }
 
-    Ok(ResolvedConfig { token, channel })
+    let max_file_size = match max_file_size_str {
+        Some(s) => parse_file_size(&s)?,
+        None => DEFAULT_MAX_FILE_SIZE,
+    };
+
+    Ok(ResolvedConfig {
+        token,
+        channel,
+        max_file_size,
+    })
 }
