@@ -31,7 +31,11 @@ pub struct ResolvedConfig {
     pub max_file_size: u64,
 }
 
-const DEFAULT_MAX_FILE_SIZE: u64 = 1_073_741_824; // 1GB (Slack limit)
+const KB: u64 = 1_024;
+const MB: u64 = 1_048_576;
+const GB: u64 = 1_073_741_824;
+
+const DEFAULT_MAX_FILE_SIZE: u64 = GB; // Slack limit
 
 pub fn parse_file_size(s: &str) -> Result<u64> {
     let s = s.trim();
@@ -46,9 +50,9 @@ pub fn parse_file_size(s: &str) -> Result<u64> {
 
     let multiplier: u64 = match unit.as_str() {
         "" | "B" => 1,
-        "KB" | "K" => 1_024,
-        "MB" | "M" => 1_048_576,
-        "GB" | "G" => 1_073_741_824,
+        "KB" | "K" => KB,
+        "MB" | "M" => MB,
+        "GB" | "G" => GB,
         _ => bail!("unknown file size unit: '{unit}' (use KB, MB, or GB)"),
     };
 
@@ -113,4 +117,16 @@ pub fn resolve(
         channel,
         max_file_size,
     })
+}
+
+pub fn format_size(bytes: u64) -> String {
+    if bytes >= GB {
+        format!("{:.1}GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1}MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1}KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{bytes}B")
+    }
 }

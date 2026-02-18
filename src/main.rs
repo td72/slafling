@@ -17,7 +17,7 @@ fn main() -> Result<()> {
     let file_needs_stdin = cli.file.as_deref() == Some("");
 
     // No flags at all → treat as implicit -t (stdin text)
-    let (mut text, file) = if cli.text.is_none() && cli.file.is_none() {
+    let (text, file) = if cli.text.is_none() && cli.file.is_none() {
         let stdin = std::io::stdin();
         if stdin.is_terminal() {
             bail!("no input provided (use -t, -f, or pipe via stdin)");
@@ -84,8 +84,8 @@ fn main() -> Result<()> {
         if data.len() as u64 > resolved.max_file_size {
             bail!(
                 "file size ({}) exceeds limit ({})",
-                format_size(data.len() as u64),
-                format_size(resolved.max_file_size),
+                config::format_size(data.len() as u64),
+                config::format_size(resolved.max_file_size),
             );
         }
 
@@ -104,7 +104,7 @@ fn main() -> Result<()> {
         )?;
     } else {
         // Text-only mode
-        let message = text.take().unwrap_or_default();
+        let message = text.unwrap_or_default();
         if message.is_empty() {
             bail!("message is empty");
         }
@@ -114,18 +114,3 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn format_size(bytes: u64) -> String {
-    const KB: u64 = 1_024;
-    const MB: u64 = 1_048_576;
-    const GB: u64 = 1_073_741_824;
-
-    if bytes >= GB {
-        format!("{:.1}GB", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.1}MB", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.1}KB", bytes as f64 / KB as f64)
-    } else {
-        format!("{bytes}B")
-    }
-}
