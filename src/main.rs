@@ -2,7 +2,7 @@ mod cli;
 mod config;
 mod slack;
 
-use std::io::{IsTerminal, Read};
+use std::io::{BufRead, IsTerminal, Read, Write};
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
@@ -103,6 +103,32 @@ fn run_send(profile: Option<&str>, send: cli::SendArgs) -> Result<()> {
 
         (text, file_data)
     };
+
+    if resolved.confirm && !send.yes {
+        let summary = if let Some((filename, _)) = &file {
+            match text.as_deref() {
+                Some(t) if !t.is_empty() => format!("file: {filename}\n> {t}"),
+                _ => format!("file: {filename}"),
+            }
+        } else {
+            let message = text.as_deref().unwrap_or("");
+            format!("> {message}")
+        };
+
+        let stdin = std::io::stdin();
+        if !stdin.is_terminal() {
+            bail!("confirm is enabled but stdin is not a TTY (pass -y to skip confirmation)");
+        }
+
+        eprint!("Send to {}:\n{summary}\nSend? [y/N] ", resolved.channel);
+        std::io::stderr().flush()?;
+
+        let mut input = String::new();
+        std::io::stdin().lock().read_line(&mut input)?;
+        if !matches!(input.trim(), "y" | "Y") {
+            bail!("aborted");
+        }
+    }
 
     if let Some((filename, data)) = &file {
         // max_file_size check
