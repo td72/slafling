@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 /// Fling messages to Slack
 #[derive(Parser)]
@@ -40,5 +40,16 @@ pub enum Command {
     Search {
         /// Channel name to search for (partial match)
         query: String,
+
+        /// Output format (auto-detected if omitted: table for TTY, tsv for pipe)
+        #[arg(short, long)]
+        output: Option<OutputFormat>,
     },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum OutputFormat {
+    Table,
+    Tsv,
+    Json,
 }

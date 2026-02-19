@@ -17,6 +17,7 @@ pub struct DefaultConfig {
     pub channel: String,
     pub max_file_size: Option<String>,
     pub confirm: Option<bool>,
+    pub output: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -25,6 +26,7 @@ pub struct Profile {
     pub channel: Option<String>,
     pub max_file_size: Option<String>,
     pub confirm: Option<bool>,
+    pub output: Option<String>,
 }
 
 pub struct ResolvedConfig {
@@ -137,6 +139,24 @@ pub fn resolve_token(config: &ConfigFile, profile_name: Option<&str>) -> Result<
     }
 
     Ok(token)
+}
+
+pub fn resolve_output(config: &ConfigFile, profile_name: Option<&str>) -> Option<String> {
+    if let Ok(val) = std::env::var("SLAFLING_OUTPUT") {
+        return Some(val);
+    }
+
+    let mut output = config.default.output.clone();
+
+    if let Some(name) = profile_name {
+        if let Some(profile) = config.profiles.get(name) {
+            if profile.output.is_some() {
+                output = profile.output.clone();
+            }
+        }
+    }
+
+    output
 }
 
 pub fn format_size(bytes: u64) -> String {

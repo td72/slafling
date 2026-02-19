@@ -9,16 +9,24 @@ use clap::Parser;
 
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
+    let cfg = config::load_config()?;
 
     match cli.command {
-        Some(cli::Command::Search { query }) => run_search(cli.profile.as_deref(), &query),
-        None => run_send(cli.profile.as_deref(), cli.send),
+        Some(cli::Command::Search { query, output }) => {
+            run_search(cli.profile.as_deref(), &query, output, &cfg)
+        }
+        None => run_send(cli.profile.as_deref(), cli.send, &cfg),
     }
 }
 
-fn run_search(profile: Option<&str>, query: &str) -> Result<()> {
-    let cfg = config::load_config()?;
-    let token = config::resolve_token(&cfg, profile)?;
+fn run_search(
+    profile: Option<&str>,
+    query: &str,
+    cli_output: Option<cli::OutputFormat>,
+    cfg: &config::ConfigFile,
+) -> Result<()> {
+    let token = config::resolve_token(cfg, profile)?;
+    let format = resolve_output_format(cli_output, cfg, profile);
 
     let channels = slack::search_channels(&token, query)?;
 
@@ -27,16 +35,113 @@ fn run_search(profile: Option<&str>, query: &str) -> Result<()> {
         std::process::exit(1);
     }
 
-    for (name, id) in &channels {
-        println!("{name}\t{id}");
+    match format {
+        cli::OutputFormat::Table => print_table(&channels),
+        cli::OutputFormat::Tsv => print_tsv(&channels),
+        cli::OutputFormat::Json => print_json(&channels)?,
     }
 
     Ok(())
 }
 
-fn run_send(profile: Option<&str>, send: cli::SendArgs) -> Result<()> {
-    let cfg = config::load_config()?;
-    let resolved = config::resolve(&cfg, profile)?;
+fn resolve_output_format(
+    cli_output: Option<cli::OutputFormat>,
+    cfg: &config::ConfigFile,
+    profile: Option<&str>,
+) -> cli::OutputFormat {
+    // 1. CLI flag
+    if let Some(f) = cli_output {
+        return f;
+    }
+
+    // 2. env var / 3. config
+    if let Some(s) = config::resolve_output(cfg, profile) {
+        match s.to_lowercase().as_str() {
+            "table" => return cli::OutputFormat::Table,
+            "tsv" => return cli::OutputFormat::Tsv,
+            "json" => return cli::OutputFormat::Json,
+            _ => {}
+        }
+    }
+
+    // 4. auto-detect
+    if std::io::stdout().is_terminal() {
+        cli::OutputFormat::Table
+    } else {
+        cli::OutputFormat::Tsv
+    }
+}
+
+fn print_table(channels: &[slack::ChannelInfo]) {
+    let name_width = channels
+        .iter()
+        .map(|c| c.name.len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+    let type_width = channels
+        .iter()
+        .map(|c| c.channel_type.len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+
+    let has_user_id = channels.iter().any(|c| c.user_id.is_some());
+
+    let header_name: &str = "NAME";
+    let header_type: &str = "TYPE";
+    let header_ch_id: &str = "CHANNEL_ID";
+    let header_user_id: &str = "USER_ID";
+
+    if has_user_id {
+        println!(
+            "{:<name_width$}  {:<type_width$}  {:<13}  {}",
+            header_name, header_type, header_ch_id, header_user_id
+        );
+        for ch in channels {
+            println!(
+                "{:<name_width$}  {:<type_width$}  {:<13}  {}",
+                ch.name,
+                ch.channel_type,
+                ch.channel_id,
+                ch.user_id.as_deref().unwrap_or("")
+            );
+        }
+    } else {
+        println!(
+            "{:<name_width$}  {:<type_width$}  {}",
+            header_name, header_type, header_ch_id
+        );
+        for ch in channels {
+            println!(
+                "{:<name_width$}  {:<type_width$}  {}",
+                ch.name, ch.channel_type, ch.channel_id
+            );
+        }
+    }
+}
+
+fn print_tsv(channels: &[slack::ChannelInfo]) {
+    for ch in channels {
+        println!(
+            "{}\t{}\t{}\t{}",
+            ch.name,
+            ch.channel_type,
+            ch.channel_id,
+            ch.user_id.as_deref().unwrap_or("")
+        );
+    }
+}
+
+fn print_json(channels: &[slack::ChannelInfo]) -> Result<()> {
+    let json = serde_json::to_string_pretty(channels)
+        .context("failed to serialize search results to JSON")?;
+    println!("{json}");
+    Ok(())
+}
+
+fn run_send(profile: Option<&str>, send: cli::SendArgs, cfg: &config::ConfigFile) -> Result<()> {
+    let resolved = config::resolve(cfg, profile)?;
 
     let text_needs_stdin = send.text.as_deref() == Some("");
     let file_needs_stdin = send.file.as_deref() == Some("");
