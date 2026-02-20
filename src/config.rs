@@ -75,7 +75,65 @@ pub fn load_config() -> Result<ConfigFile> {
     let path = config_path()?;
     let content = std::fs::read_to_string(&path)
         .with_context(|| format!("failed to read {}", path.display()))?;
-    toml::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))
+    let config: ConfigFile =
+        toml::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))?;
+    validate_config(&config)?;
+    Ok(config)
+}
+
+const VALID_OUTPUT_VALUES: &[&str] = &["table", "tsv", "json"];
+const VALID_SEARCH_TYPES: &[&str] = &["public_channel", "private_channel", "im", "mpim"];
+
+fn validate_config(config: &ConfigFile) -> Result<()> {
+    validate_section_values(
+        "default",
+        config.default.output.as_deref(),
+        config.default.search_types.as_deref(),
+    )?;
+
+    for (name, profile) in &config.profiles {
+        validate_section_values(
+            &format!("profiles.{name}"),
+            profile.output.as_deref(),
+            profile.search_types.as_deref(),
+        )?;
+    }
+
+    Ok(())
+}
+
+fn validate_section_values(
+    section: &str,
+    output: Option<&str>,
+    search_types: Option<&[String]>,
+) -> Result<()> {
+    if let Some(val) = output {
+        let lower = val.to_lowercase();
+        if !VALID_OUTPUT_VALUES.contains(&lower.as_str()) {
+            bail!(
+                "invalid output '{}' in [{}] (valid: {})",
+                val,
+                section,
+                VALID_OUTPUT_VALUES.join(", ")
+            );
+        }
+    }
+
+    if let Some(types) = search_types {
+        for val in types {
+            let lower = val.to_lowercase();
+            if !VALID_SEARCH_TYPES.contains(&lower.as_str()) {
+                bail!(
+                    "invalid search_types '{}' in [{}] (valid: {})",
+                    val,
+                    section,
+                    VALID_SEARCH_TYPES.join(", ")
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<ResolvedConfig> {
@@ -184,5 +242,88 @@ pub fn format_size(bytes: u64) -> String {
         format!("{:.1}KB", bytes as f64 / KB as f64)
     } else {
         format!("{bytes}B")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn minimal_config() -> ConfigFile {
+        ConfigFile {
+            default: DefaultConfig {
+                token: "xoxb-test".to_string(),
+                channel: "#general".to_string(),
+                max_file_size: None,
+                confirm: None,
+                output: None,
+                search_types: None,
+            },
+            profiles: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn valid_output_values() {
+        for val in &["table", "tsv", "json", "JSON", "Table"] {
+            let mut cfg = minimal_config();
+            cfg.default.output = Some(val.to_string());
+            assert!(
+                validate_config(&cfg).is_ok(),
+                "expected '{val}' to be valid"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_output_value() {
+        let mut cfg = minimal_config();
+        cfg.default.output = Some("yaml".to_string());
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.to_string().contains("invalid output 'yaml'"));
+    }
+
+    #[test]
+    fn valid_search_types() {
+        let mut cfg = minimal_config();
+        cfg.default.search_types = Some(vec![
+            "public_channel".to_string(),
+            "private_channel".to_string(),
+            "im".to_string(),
+            "mpim".to_string(),
+        ]);
+        assert!(validate_config(&cfg).is_ok());
+    }
+
+    #[test]
+    fn invalid_search_type() {
+        let mut cfg = minimal_config();
+        cfg.default.search_types = Some(vec!["public_channel".to_string(), "foo".to_string()]);
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.to_string().contains("invalid search_types 'foo'"));
+    }
+
+    #[test]
+    fn invalid_profile_output() {
+        let mut cfg = minimal_config();
+        cfg.profiles.insert(
+            "work".to_string(),
+            Profile {
+                token: None,
+                channel: None,
+                max_file_size: None,
+                confirm: None,
+                output: Some("xml".to_string()),
+                search_types: None,
+            },
+        );
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.to_string().contains("profiles.work"));
+    }
+
+    #[test]
+    fn none_values_are_valid() {
+        let cfg = minimal_config();
+        assert!(validate_config(&cfg).is_ok());
     }
 }
