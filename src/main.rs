@@ -12,8 +12,17 @@ fn main() -> Result<()> {
     let cfg = config::load_config()?;
 
     match cli.command {
-        Some(cli::Command::Search { query, output }) => {
-            run_search(cli.profile.as_deref(), &query, output, &cfg)
+        Some(cli::Command::Search {
+            query,
+            output,
+            types,
+        }) => {
+            let types_str = match types {
+                Some(t) => cli::search_types_to_api_string(&t),
+                None => config::resolve_search_types(&cfg, cli.profile.as_deref())
+                    .unwrap_or_else(|| "public_channel".to_string()),
+            };
+            run_search(cli.profile.as_deref(), &query, output, &types_str, &cfg)
         }
         None => run_send(cli.profile.as_deref(), cli.send, &cfg),
     }
@@ -23,12 +32,13 @@ fn run_search(
     profile: Option<&str>,
     query: &str,
     cli_output: Option<cli::OutputFormat>,
+    types: &str,
     cfg: &config::ConfigFile,
 ) -> Result<()> {
     let token = config::resolve_token(cfg, profile)?;
     let format = resolve_output_format(cli_output, cfg, profile);
 
-    let channels = slack::search_channels(&token, query)?;
+    let channels = slack::search_channels(&token, query, types)?;
 
     if channels.is_empty() {
         eprintln!("no channels matching '{query}'");

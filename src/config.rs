@@ -18,6 +18,7 @@ pub struct DefaultConfig {
     pub max_file_size: Option<String>,
     pub confirm: Option<bool>,
     pub output: Option<String>,
+    pub search_types: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -27,6 +28,7 @@ pub struct Profile {
     pub max_file_size: Option<String>,
     pub confirm: Option<bool>,
     pub output: Option<String>,
+    pub search_types: Option<Vec<String>>,
 }
 
 pub struct ResolvedConfig {
@@ -139,6 +141,20 @@ pub fn resolve_token(config: &ConfigFile, profile_name: Option<&str>) -> Result<
     }
 
     Ok(token)
+}
+
+pub fn resolve_search_types(config: &ConfigFile, profile_name: Option<&str>) -> Option<String> {
+    let mut search_types = config.default.search_types.clone();
+
+    if let Some(name) = profile_name {
+        if let Some(profile) = config.profiles.get(name) {
+            if profile.search_types.is_some() {
+                search_types = profile.search_types.clone();
+            }
+        }
+    }
+
+    search_types.map(|v| v.join(","))
 }
 
 pub fn resolve_output(config: &ConfigFile, profile_name: Option<&str>) -> Option<String> {
