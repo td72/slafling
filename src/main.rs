@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     match cli.command {
         Some(cli::Command::Validate) => {
             let path = config::config_path()?;
-            eprintln!("{}: ok", path.display());
+            println!("{}: ok", path.display());
             Ok(())
         }
         Some(cli::Command::Search {

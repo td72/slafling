@@ -108,7 +108,8 @@ fn validate_section_values(
     search_types: Option<&[String]>,
 ) -> Result<()> {
     if let Some(val) = output {
-        if !VALID_OUTPUT_VALUES.contains(&val) {
+        let lower = val.to_lowercase();
+        if !VALID_OUTPUT_VALUES.contains(&lower.as_str()) {
             bail!(
                 "invalid output '{}' in [{}] (valid: {})",
                 val,
@@ -120,7 +121,8 @@ fn validate_section_values(
 
     if let Some(types) = search_types {
         for val in types {
-            if !VALID_SEARCH_TYPES.contains(&val.as_str()) {
+            let lower = val.to_lowercase();
+            if !VALID_SEARCH_TYPES.contains(&lower.as_str()) {
                 bail!(
                     "invalid search_types '{}' in [{}] (valid: {})",
                     val,
@@ -263,7 +265,7 @@ mod tests {
 
     #[test]
     fn valid_output_values() {
-        for val in &["table", "tsv", "json"] {
+        for val in &["table", "tsv", "json", "JSON", "Table"] {
             let mut cfg = minimal_config();
             cfg.default.output = Some(val.to_string());
             assert!(
