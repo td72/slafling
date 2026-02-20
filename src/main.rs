@@ -11,6 +11,10 @@ fn main() -> Result<()> {
     let cli = cli::Cli::parse();
     let cfg = config::load_config()?;
 
+    let profile = cli
+        .profile
+        .or_else(|| std::env::var("SLAFLING_PROFILE").ok());
+
     match cli.command {
         Some(cli::Command::Validate) => {
             let path = config::config_path()?;
@@ -24,12 +28,12 @@ fn main() -> Result<()> {
         }) => {
             let types_str = match types {
                 Some(t) => cli::search_types_to_api_string(&t),
-                None => config::resolve_search_types(&cfg, cli.profile.as_deref())
+                None => config::resolve_search_types(&cfg, profile.as_deref())
                     .unwrap_or_else(|| "public_channel".to_string()),
             };
-            run_search(cli.profile.as_deref(), &query, output, &types_str, &cfg)
+            run_search(profile.as_deref(), &query, output, &types_str, &cfg)
         }
-        None => run_send(cli.profile.as_deref(), cli.send, &cfg),
+        None => run_send(profile.as_deref(), cli.send, &cfg),
     }
 }
 
