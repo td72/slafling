@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 /// Fling messages to Slack
 #[derive(Parser)]
@@ -40,5 +40,47 @@ pub enum Command {
     Search {
         /// Channel name to search for (partial match)
         query: String,
+
+        /// Output format (auto-detected if omitted: table for TTY, tsv for pipe)
+        #[arg(short, long)]
+        output: Option<OutputFormat>,
+
+        /// Channel types to search
+        #[arg(long, value_delimiter = ',')]
+        types: Option<Vec<SearchType>>,
     },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum SearchType {
+    PublicChannel,
+    PrivateChannel,
+    Im,
+    Mpim,
+}
+
+impl SearchType {
+    pub fn as_api_str(self) -> &'static str {
+        match self {
+            Self::PublicChannel => "public_channel",
+            Self::PrivateChannel => "private_channel",
+            Self::Im => "im",
+            Self::Mpim => "mpim",
+        }
+    }
+}
+
+pub fn search_types_to_api_string(types: &[SearchType]) -> String {
+    types
+        .iter()
+        .map(|t| t.as_api_str())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum OutputFormat {
+    Table,
+    Tsv,
+    Json,
 }

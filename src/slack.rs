@@ -151,7 +151,15 @@ struct ConversationsListResponse {
 #[derive(Deserialize)]
 struct Channel {
     id: String,
-    name: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    is_im: bool,
+    #[serde(default)]
+    is_mpim: bool,
+    #[serde(default)]
+    is_private: bool,
+    user: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -159,7 +167,17 @@ struct ResponseMetadata {
     next_cursor: Option<String>,
 }
 
-pub fn search_channels(token: &str, query: &str) -> Result<Vec<(String, String)>> {
+#[derive(Clone, Serialize)]
+pub struct ChannelInfo {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub channel_type: String,
+    pub channel_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+}
+
+pub fn search_channels(token: &str, query: &str, types: &str) -> Result<Vec<ChannelInfo>> {
     let query_lower = query.to_lowercase();
     let mut results = Vec::new();
     let mut cursor = String::new();
@@ -168,6 +186,7 @@ pub fn search_channels(token: &str, query: &str) -> Result<Vec<(String, String)>
         let mut params = vec![
             ("limit".to_string(), "200".to_string()),
             ("exclude_archived".to_string(), "true".to_string()),
+            ("types".to_string(), types.to_string()),
         ];
         if !cursor.is_empty() {
             params.push(("cursor".to_string(), cursor.clone()));
@@ -189,8 +208,28 @@ pub fn search_channels(token: &str, query: &str) -> Result<Vec<(String, String)>
         }
 
         for ch in &body.channels {
-            if ch.name.to_lowercase().contains(&query_lower) {
-                results.push((ch.name.clone(), ch.id.clone()));
+            let display_name = ch
+                .name
+                .clone()
+                .or_else(|| ch.user.clone())
+                .unwrap_or_else(|| ch.id.clone());
+
+            if display_name.to_lowercase().contains(&query_lower) {
+                let channel_type = if ch.is_im {
+                    "im"
+                } else if ch.is_mpim {
+                    "mpim"
+                } else if ch.is_private {
+                    "private_channel"
+                } else {
+                    "public_channel"
+                };
+                results.push(ChannelInfo {
+                    name: display_name,
+                    channel_type: channel_type.to_string(),
+                    channel_id: ch.id.clone(),
+                    user_id: ch.user.clone(),
+                });
             }
         }
 
@@ -204,6 +243,6 @@ pub fn search_channels(token: &str, query: &str) -> Result<Vec<(String, String)>
         }
     }
 
-    results.sort_by(|a, b| a.0.cmp(&b.0));
+    results.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(results)
 }

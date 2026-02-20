@@ -66,8 +66,11 @@ slafling search general
 # Search with a profile (uses that profile's token)
 slafling -p work search deploy
 
+# Output as JSON
+slafling search general -o json
+
 # Pick a channel with fzf and copy its ID
-slafling search dev | fzf | cut -f2 | pbcopy
+slafling search dev | fzf | cut -f3 | pbcopy
 ```
 
 ## License

@@ -66,8 +66,11 @@ slafling search general
 # プロファイル指定で検索 (そのプロファイルのトークンを使用)
 slafling -p work search deploy
 
+# JSON形式で出力
+slafling search general -o json
+
 # fzfでチャンネルを選んでIDをコピー
-slafling search dev | fzf | cut -f2 | pbcopy
+slafling search dev | fzf | cut -f3 | pbcopy
 ```
 
 ## ライセンス
