@@ -157,6 +157,8 @@ struct Channel {
     is_im: bool,
     #[serde(default)]
     is_mpim: bool,
+    #[serde(default)]
+    is_private: bool,
     user: Option<String>,
 }
 
@@ -217,8 +219,10 @@ pub fn search_channels(token: &str, query: &str, types: &str) -> Result<Vec<Chan
                     "im"
                 } else if ch.is_mpim {
                     "mpim"
+                } else if ch.is_private {
+                    "private_channel"
                 } else {
-                    "channel"
+                    "public_channel"
                 };
                 results.push(ChannelInfo {
                     name: display_name,
