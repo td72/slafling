@@ -36,6 +36,9 @@ pub struct SendArgs {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Validate config file
+    Validate,
+
     /// Search for Slack channels by name
     Search {
         /// Channel name to search for (partial match)

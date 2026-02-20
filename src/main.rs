@@ -12,6 +12,11 @@ fn main() -> Result<()> {
     let cfg = config::load_config()?;
 
     match cli.command {
+        Some(cli::Command::Validate) => {
+            let path = config::config_path()?;
+            eprintln!("{}: ok", path.display());
+            Ok(())
+        }
         Some(cli::Command::Search {
             query,
             output,
