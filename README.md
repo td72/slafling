@@ -42,16 +42,49 @@ cargo install --path .
 
 ## Setup
 
+### Quick Start
+
+```bash
+slafling init
+```
+
+This creates `~/.config/slafling/config.toml` and stores your Bot Token securely (macOS Keychain on macOS, token file on other platforms).
+
+### Token Management
+
+Tokens are **not** stored in `config.toml`. They are resolved in this order:
+
+1. **`SLAFLING_TOKEN` environment variable** (shared across profiles, for CI/CD and temporary overrides)
+2. **Backend specified by `token_store`** — Keychain (`"keychain"`, default on macOS) or token file (`"file"`, default on other platforms)
+
+Token storage location: `<data_dir>/slafling/tokens/<profile>` (file) or macOS Keychain service `slafling` (keychain). `<data_dir>` is `~/Library/Application Support` on macOS, `~/.local/share` on Linux.
+
+```bash
+# Store a token
+slafling token set
+
+# Store a token for a specific profile
+slafling token set -p work
+
+# Show where the token is resolved from
+slafling token show
+
+# Remove a stored token
+slafling token delete
+```
+
+### Manual Setup
+
 Create `~/.config/slafling/config.toml`:
 
 ```toml
 [default]
-token = "xoxb-..."
 channel = "#general"
-max_file_size = "100MB"       # optional (default: 1GB)
+max_file_size = "100MB"       # optional (default: 100MB, Slack API max: 1GB)
 confirm = true                # optional: prompt before sending (default: false)
 output = "table"              # optional: search output format — table, tsv, json (default: auto-detect)
 search_types = ["public_channel", "private_channel"]  # optional (default: public_channel) — public_channel, private_channel, im, mpim
+# token_store = "keychain"    # optional: keychain or file (default: keychain on macOS, file on other platforms)
 
 [profiles.random]
 channel = "#random"
@@ -60,8 +93,7 @@ channel = "#random"
 channel = "D0123456789"   # Conversation ID for DM (not User ID)
 
 [profiles.other-workspace]
-token = "xoxb-..."        # Different workspace token
-channel = "#alerts"
+channel = "#alerts"       # Use `slafling token set -p other-workspace` to store a different token
 ```
 
 ### Bot Token Scopes
@@ -131,6 +163,33 @@ slafling search general -o json
 
 # Pick a channel with fzf and copy its ID
 slafling search dev | fzf | cut -f3 | pbcopy
+```
+
+### Init
+
+```bash
+# Create config file interactively
+slafling init
+```
+
+### Token
+
+`-p/--profile` and `SLAFLING_PROFILE` work for all subcommands including `token`.
+
+```bash
+# Store token interactively
+slafling token set
+
+# Store token for a profile
+slafling token set -p work
+
+# Show token source
+slafling token show
+slafling token show -p work
+
+# Delete stored token
+slafling token delete
+slafling token delete -p work
 ```
 
 ### Validate

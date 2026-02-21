@@ -36,6 +36,9 @@ pub struct SendArgs {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Initialize config file
+    Init,
+
     /// Validate config file
     Validate,
 
@@ -52,6 +55,24 @@ pub enum Command {
         #[arg(long, value_delimiter = ',')]
         types: Option<Vec<SearchType>>,
     },
+
+    /// Manage token storage
+    Token {
+        #[command(subcommand)]
+        action: TokenAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TokenAction {
+    /// Store token in Keychain (macOS) or token file
+    Set,
+
+    /// Remove stored token
+    Delete,
+
+    /// Show where token is resolved from
+    Show,
 }
 
 #[derive(Clone, Copy, ValueEnum)]

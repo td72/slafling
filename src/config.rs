@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
+use crate::{keychain, token};
+
 #[derive(Deserialize)]
 pub struct ConfigFile {
     pub default: DefaultConfig,
@@ -13,17 +15,16 @@ pub struct ConfigFile {
 
 #[derive(Deserialize)]
 pub struct DefaultConfig {
-    pub token: String,
-    pub channel: String,
+    pub channel: Option<String>,
     pub max_file_size: Option<String>,
     pub confirm: Option<bool>,
     pub output: Option<String>,
     pub search_types: Option<Vec<String>>,
+    pub token_store: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct Profile {
-    pub token: Option<String>,
     pub channel: Option<String>,
     pub max_file_size: Option<String>,
     pub confirm: Option<bool>,
@@ -42,7 +43,7 @@ const KB: u64 = 1_024;
 const MB: u64 = 1_048_576;
 const GB: u64 = 1_073_741_824;
 
-const DEFAULT_MAX_FILE_SIZE: u64 = GB; // Slack limit
+const DEFAULT_MAX_FILE_SIZE: u64 = 100 * MB; // Slack API max: 1GB
 
 pub fn parse_file_size(s: &str) -> Result<u64> {
     let s = s.trim();
@@ -66,9 +67,36 @@ pub fn parse_file_size(s: &str) -> Result<u64> {
     Ok((num * multiplier as f64) as u64)
 }
 
+pub fn generate_init_config() -> String {
+    include_str!("../config.template.toml").replace(
+        "# token_store = \"keychain\"",
+        &format!("# token_store = \"{}\"", default_token_store()),
+    )
+}
+
+pub fn write_init_config(path: &std::path::Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create directory {}", parent.display()))?;
+    }
+    let content = generate_init_config();
+    std::fs::write(path, &content)
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
 pub fn config_path() -> Result<PathBuf> {
     let home = dirs::home_dir().context("could not determine home directory")?;
     Ok(home.join(".config").join("slafling").join("config.toml"))
+}
+
+/// Return the platform default for token_store: "keychain" on macOS, "file" elsewhere.
+pub fn default_token_store() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "keychain"
+    } else {
+        "file"
+    }
 }
 
 pub fn load_config() -> Result<ConfigFile> {
@@ -83,6 +111,7 @@ pub fn load_config() -> Result<ConfigFile> {
 
 const VALID_OUTPUT_VALUES: &[&str] = &["table", "tsv", "json"];
 const VALID_SEARCH_TYPES: &[&str] = &["public_channel", "private_channel", "im", "mpim"];
+const VALID_TOKEN_STORE_VALUES: &[&str] = &["keychain", "file"];
 
 fn validate_config(config: &ConfigFile) -> Result<()> {
     validate_section_values(
@@ -90,6 +119,20 @@ fn validate_config(config: &ConfigFile) -> Result<()> {
         config.default.output.as_deref(),
         config.default.search_types.as_deref(),
     )?;
+
+    if let Some(val) = &config.default.token_store {
+        let lower = val.to_lowercase();
+        if !VALID_TOKEN_STORE_VALUES.contains(&lower.as_str()) {
+            bail!(
+                "invalid token_store '{}' in [default] (valid: {})",
+                val,
+                VALID_TOKEN_STORE_VALUES.join(", ")
+            );
+        }
+        if lower == "keychain" && !cfg!(target_os = "macos") {
+            bail!("token_store 'keychain' is only supported on macOS");
+        }
+    }
 
     for (name, profile) in &config.profiles {
         validate_section_values(
@@ -136,8 +179,76 @@ fn validate_section_values(
     Ok(())
 }
 
+/// Resolve token from: 1) SLAFLING_TOKEN env  2) token_store backend
+pub fn resolve_token(token_store: &str, profile_name: Option<&str>) -> Result<String> {
+    // 1. Environment variable (highest priority — for CI/CD and temporary overrides)
+    if let Ok(t) = std::env::var("SLAFLING_TOKEN") {
+        if !t.is_empty() {
+            return Ok(t);
+        }
+    }
+
+    // 2. token_store backend
+    match token_store {
+        "keychain" => {
+            if let Some(t) = keychain::get_token(profile_name)? {
+                return Ok(t);
+            }
+        }
+        "file" => {
+            if let Some(t) = token::get_token(profile_name)? {
+                return Ok(t);
+            }
+        }
+        _ => bail!("invalid token_store '{token_store}'"),
+    }
+
+    bail!("token is not configured (use `slafling token set` or set SLAFLING_TOKEN)")
+}
+
+/// Describe where the token is currently resolved from
+pub fn describe_token_source(
+    token_store: &str,
+    profile_name: Option<&str>,
+) -> Result<(&'static str, String)> {
+    // 1. Env var
+    if let Ok(t) = std::env::var("SLAFLING_TOKEN") {
+        if !t.is_empty() {
+            return Ok(("env", "SLAFLING_TOKEN".to_string()));
+        }
+    }
+
+    // 2. token_store backend
+    match token_store {
+        "keychain" => {
+            if keychain::get_token(profile_name)?.is_some() {
+                return Ok(("keychain", "macOS Keychain".to_string()));
+            }
+        }
+        "file" => {
+            let path = token::token_path(profile_name)?;
+            if token::get_token(profile_name)?.is_some() {
+                return Ok(("file", path.display().to_string()));
+            }
+        }
+        _ => bail!("invalid token_store '{token_store}'"),
+    }
+
+    bail!("token is not configured (use `slafling token set` or set SLAFLING_TOKEN)")
+}
+
+pub fn resolve_token_store(config: &ConfigFile) -> String {
+    config
+        .default
+        .token_store
+        .as_deref()
+        .unwrap_or(default_token_store())
+        .to_lowercase()
+}
+
 pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<ResolvedConfig> {
-    let mut token = config.default.token.clone();
+    let token_store = resolve_token_store(config);
+    let token = resolve_token(&token_store, profile_name)?;
     let mut channel = config.default.channel.clone();
     let mut max_file_size_str = config.default.max_file_size.clone();
     let mut confirm = config.default.confirm.unwrap_or(false);
@@ -147,11 +258,8 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
             .profiles
             .get(name)
             .with_context(|| format!("profile '{}' not found in config", name))?;
-        if let Some(t) = &profile.token {
-            token = t.clone();
-        }
         if let Some(c) = &profile.channel {
-            channel = c.clone();
+            channel = Some(c.clone());
         }
         if profile.max_file_size.is_some() {
             max_file_size_str = profile.max_file_size.clone();
@@ -161,12 +269,10 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
         }
     }
 
-    if token.is_empty() {
-        bail!("token is not configured");
-    }
-    if channel.is_empty() {
-        bail!("channel is not configured");
-    }
+    let channel = match channel {
+        Some(c) if !c.is_empty() => c,
+        _ => bail!("channel is not configured"),
+    };
 
     let max_file_size = match max_file_size_str {
         Some(s) => parse_file_size(&s)?,
@@ -179,26 +285,6 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
         max_file_size,
         confirm,
     })
-}
-
-pub fn resolve_token(config: &ConfigFile, profile_name: Option<&str>) -> Result<String> {
-    let mut token = config.default.token.clone();
-
-    if let Some(name) = profile_name {
-        let profile = config
-            .profiles
-            .get(name)
-            .with_context(|| format!("profile '{}' not found in config", name))?;
-        if let Some(t) = &profile.token {
-            token = t.clone();
-        }
-    }
-
-    if token.is_empty() {
-        bail!("token is not configured");
-    }
-
-    Ok(token)
 }
 
 pub fn resolve_search_types(config: &ConfigFile, profile_name: Option<&str>) -> Option<String> {
@@ -252,12 +338,12 @@ mod tests {
     fn minimal_config() -> ConfigFile {
         ConfigFile {
             default: DefaultConfig {
-                token: "xoxb-test".to_string(),
-                channel: "#general".to_string(),
+                channel: Some("#general".to_string()),
                 max_file_size: None,
                 confirm: None,
                 output: None,
                 search_types: None,
+                token_store: None,
             },
             profiles: HashMap::new(),
         }
@@ -309,7 +395,6 @@ mod tests {
         cfg.profiles.insert(
             "work".to_string(),
             Profile {
-                token: None,
                 channel: None,
                 max_file_size: None,
                 confirm: None,
@@ -322,8 +407,180 @@ mod tests {
     }
 
     #[test]
+    fn valid_token_store_file() {
+        for val in &["file", "FILE"] {
+            let mut cfg = minimal_config();
+            cfg.default.token_store = Some(val.to_string());
+            assert!(
+                validate_config(&cfg).is_ok(),
+                "expected '{val}' to be valid"
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn valid_token_store_keychain() {
+        for val in &["keychain", "Keychain"] {
+            let mut cfg = minimal_config();
+            cfg.default.token_store = Some(val.to_string());
+            assert!(
+                validate_config(&cfg).is_ok(),
+                "expected '{val}' to be valid"
+            );
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn keychain_rejected_on_non_macos() {
+        let mut cfg = minimal_config();
+        cfg.default.token_store = Some("keychain".to_string());
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.to_string().contains("only supported on macOS"));
+    }
+
+    #[test]
+    fn invalid_token_store_value() {
+        let mut cfg = minimal_config();
+        cfg.default.token_store = Some("redis".to_string());
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.to_string().contains("invalid token_store 'redis'"));
+    }
+
+    #[test]
+    fn default_token_store_returns_valid_value() {
+        let val = default_token_store();
+        assert!(
+            VALID_TOKEN_STORE_VALUES.contains(&val),
+            "default_token_store() returned '{val}' which is not valid"
+        );
+    }
+
+    #[test]
     fn none_values_are_valid() {
         let cfg = minimal_config();
         assert!(validate_config(&cfg).is_ok());
+    }
+
+    #[test]
+    fn init_generates_valid_toml() {
+        let toml_str = generate_init_config();
+        let parsed: ConfigFile = toml::from_str(&toml_str).expect("generated TOML should parse");
+        assert!(parsed.default.channel.is_none());
+    }
+
+    #[test]
+    fn init_config_template_has_token_store_needle() {
+        let template = include_str!("../config.template.toml");
+        assert!(
+            template.contains("# token_store = \"keychain\""),
+            "config.template.toml must contain the token_store needle for generate_init_config()"
+        );
+    }
+
+    #[test]
+    fn init_config_has_platform_default_token_store() {
+        let content = generate_init_config();
+        let expected = format!("# token_store = \"{}\"", default_token_store());
+        assert!(
+            content.contains(&expected),
+            "generated config should contain '{expected}'"
+        );
+    }
+
+    #[test]
+    fn init_writes_config_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_init_config(&path).unwrap();
+        assert!(path.exists());
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("[default]"));
+        assert!(!content.contains("token ="));
+    }
+
+    #[test]
+    fn init_creates_parent_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a").join("b").join("config.toml");
+        write_init_config(&path).unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn init_overwrites_existing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "old content").unwrap();
+        write_init_config(&path).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("[default]"));
+        assert!(!content.contains("old content"));
+    }
+
+    #[test]
+    fn init_config_has_no_token_field() {
+        let content = generate_init_config();
+        assert!(
+            !content.contains("token ="),
+            "config should not contain token field"
+        );
+    }
+
+    #[test]
+    fn toml_without_channel_parses() {
+        let toml_str = generate_init_config();
+        let parsed: ConfigFile = toml::from_str(&toml_str).expect("should parse without channel");
+        assert!(parsed.default.channel.is_none());
+    }
+
+    #[test]
+    fn resolve_token_invalid_store() {
+        let err = resolve_token("redis", None).unwrap_err();
+        assert!(err.to_string().contains("invalid token_store 'redis'"));
+    }
+
+    // Note: env var tests are not thread-safe; they may flake under parallel execution.
+    #[test]
+    fn resolve_token_env_takes_priority() {
+        let prev = std::env::var("SLAFLING_TOKEN").ok();
+        std::env::set_var("SLAFLING_TOKEN", "xoxb-env-test");
+        let result = resolve_token("file", None);
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
+            None => std::env::remove_var("SLAFLING_TOKEN"),
+        }
+        assert_eq!(result.unwrap(), "xoxb-env-test");
+    }
+
+    #[test]
+    fn resolve_token_empty_env_is_ignored() {
+        let prev = std::env::var("SLAFLING_TOKEN").ok();
+        std::env::set_var("SLAFLING_TOKEN", "");
+        let result = resolve_token("file", Some("_nonexistent_test_profile_"));
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
+            None => std::env::remove_var("SLAFLING_TOKEN"),
+        }
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("token is not configured"));
+    }
+
+    #[test]
+    fn describe_token_source_env() {
+        let prev = std::env::var("SLAFLING_TOKEN").ok();
+        std::env::set_var("SLAFLING_TOKEN", "xoxb-env-test");
+        let result = describe_token_source("file", None);
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
+            None => std::env::remove_var("SLAFLING_TOKEN"),
+        }
+        let (source, location) = result.unwrap();
+        assert_eq!(source, "env");
+        assert_eq!(location, "SLAFLING_TOKEN");
     }
 }

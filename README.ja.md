@@ -42,16 +42,49 @@ cargo install --path .
 
 ## セットアップ
 
+### クイックスタート
+
+```bash
+slafling init
+```
+
+Bot Tokenを入力すると `~/.config/slafling/config.toml` を生成し、トークンを安全に保存します（macOS では Keychain、他プラットフォームではトークンファイル）。
+
+### トークン管理
+
+トークンは `config.toml` には**保存されません**。以下の優先順位で解決されます:
+
+1. **`SLAFLING_TOKEN` 環境変数** (全プロファイル共通、CI/CD や一時的なオーバーライド用)
+2. **`token_store` で指定されたバックエンド** — Keychain (`"keychain"`, macOS デフォルト) またはトークンファイル (`"file"`, 他プラットフォームのデフォルト)
+
+トークン保存先: `<data_dir>/slafling/tokens/<プロファイル名>` (file) または macOS Keychain サービス `slafling` (keychain)。`<data_dir>` は macOS では `~/Library/Application Support`、Linux では `~/.local/share`。
+
+```bash
+# トークンを保存
+slafling token set
+
+# 特定プロファイルのトークンを保存
+slafling token set -p work
+
+# トークンの解決元を表示
+slafling token show
+
+# トークンを削除
+slafling token delete
+```
+
+### 手動セットアップ
+
 `~/.config/slafling/config.toml` を作成:
 
 ```toml
 [default]
-token = "xoxb-..."
 channel = "#general"
-max_file_size = "100MB"       # 任意 (デフォルト: 1GB)
+max_file_size = "100MB"       # 任意 (デフォルト: 100MB, Slack API上限: 1GB)
 confirm = true                # 任意: 送信前に確認プロンプトを表示 (デフォルト: false)
 output = "table"              # 任意: 検索の出力形式 — table, tsv, json (デフォルト: 自動判定)
 search_types = ["public_channel", "private_channel"]  # 任意 (デフォルト: public_channel) — public_channel, private_channel, im, mpim
+# token_store = "keychain"    # 任意: keychain or file (デフォルト: macOS は keychain、他は file)
 
 [profiles.random]
 channel = "#random"
@@ -60,8 +93,7 @@ channel = "#random"
 channel = "D0123456789"   # DMの会話ID (ユーザーIDではない)
 
 [profiles.other-workspace]
-token = "xoxb-..."        # 別ワークスペースのトークン
-channel = "#alerts"
+channel = "#alerts"       # `slafling token set -p other-workspace` で別トークンを保存
 ```
 
 ### Bot Token スコープ
@@ -131,6 +163,33 @@ slafling search general -o json
 
 # fzfでチャンネルを選んでIDをコピー
 slafling search dev | fzf | cut -f3 | pbcopy
+```
+
+### Init
+
+```bash
+# 設定ファイルを対話的に作成
+slafling init
+```
+
+### Token
+
+`-p/--profile` と `SLAFLING_PROFILE` は `token` を含む全サブコマンドで使用可能です。
+
+```bash
+# トークンを対話的に保存
+slafling token set
+
+# プロファイル指定でトークンを保存
+slafling token set -p work
+
+# トークンの解決元を表示
+slafling token show
+slafling token show -p work
+
+# トークンを削除
+slafling token delete
+slafling token delete -p work
 ```
 
 ### Validate
