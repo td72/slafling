@@ -84,7 +84,7 @@ max_file_size = "100MB"       # 任意 (デフォルト: 100MB, Slack API上限:
 confirm = true                # 任意: 送信前に確認プロンプトを表示 (デフォルト: false)
 output = "table"              # 任意: 検索の出力形式 — table, tsv, json (デフォルト: 自動判定)
 search_types = ["public_channel", "private_channel"]  # 任意 (デフォルト: public_channel) — public_channel, private_channel, im, mpim
-token_store = "keychain"      # 任意: keychain or file (デフォルト: macOS は keychain、他は file)
+# token_store = "keychain"    # 任意: keychain or file (デフォルト: macOS は keychain、他は file)
 
 [profiles.random]
 channel = "#random"

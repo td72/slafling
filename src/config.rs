@@ -471,6 +471,25 @@ mod tests {
     }
 
     #[test]
+    fn init_config_template_has_token_store_needle() {
+        let template = include_str!("../config.template.toml");
+        assert!(
+            template.contains("# token_store = \"keychain\""),
+            "config.template.toml must contain the token_store needle for generate_init_config()"
+        );
+    }
+
+    #[test]
+    fn init_config_has_platform_default_token_store() {
+        let content = generate_init_config();
+        let expected = format!("# token_store = \"{}\"", default_token_store());
+        assert!(
+            content.contains(&expected),
+            "generated config should contain '{expected}'"
+        );
+    }
+
+    #[test]
     fn init_writes_config_file() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
@@ -514,5 +533,54 @@ mod tests {
         let toml_str = generate_init_config();
         let parsed: ConfigFile = toml::from_str(&toml_str).expect("should parse without channel");
         assert!(parsed.default.channel.is_none());
+    }
+
+    #[test]
+    fn resolve_token_invalid_store() {
+        let err = resolve_token("redis", None).unwrap_err();
+        assert!(err.to_string().contains("invalid token_store 'redis'"));
+    }
+
+    // Note: env var tests are not thread-safe; they may flake under parallel execution.
+    #[test]
+    fn resolve_token_env_takes_priority() {
+        let prev = std::env::var("SLAFLING_TOKEN").ok();
+        std::env::set_var("SLAFLING_TOKEN", "xoxb-env-test");
+        let result = resolve_token("file", None);
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
+            None => std::env::remove_var("SLAFLING_TOKEN"),
+        }
+        assert_eq!(result.unwrap(), "xoxb-env-test");
+    }
+
+    #[test]
+    fn resolve_token_empty_env_is_ignored() {
+        let prev = std::env::var("SLAFLING_TOKEN").ok();
+        std::env::set_var("SLAFLING_TOKEN", "");
+        let result = resolve_token("file", Some("_nonexistent_test_profile_"));
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
+            None => std::env::remove_var("SLAFLING_TOKEN"),
+        }
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("token is not configured"));
+    }
+
+    #[test]
+    fn describe_token_source_env() {
+        let prev = std::env::var("SLAFLING_TOKEN").ok();
+        std::env::set_var("SLAFLING_TOKEN", "xoxb-env-test");
+        let result = describe_token_source("file", None);
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
+            None => std::env::remove_var("SLAFLING_TOKEN"),
+        }
+        let (source, location) = result.unwrap();
+        assert_eq!(source, "env");
+        assert_eq!(location, "SLAFLING_TOKEN");
     }
 }

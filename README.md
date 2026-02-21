@@ -84,7 +84,7 @@ max_file_size = "100MB"       # optional (default: 100MB, Slack API max: 1GB)
 confirm = true                # optional: prompt before sending (default: false)
 output = "table"              # optional: search output format — table, tsv, json (default: auto-detect)
 search_types = ["public_channel", "private_channel"]  # optional (default: public_channel) — public_channel, private_channel, im, mpim
-token_store = "keychain"      # optional: keychain or file (default: keychain on macOS, file on other platforms)
+# token_store = "keychain"    # optional: keychain or file (default: keychain on macOS, file on other platforms)
 
 [profiles.random]
 channel = "#random"

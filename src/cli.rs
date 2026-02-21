@@ -66,25 +66,13 @@ pub enum Command {
 #[derive(Subcommand)]
 pub enum TokenAction {
     /// Store token in Keychain (macOS) or token file
-    Set {
-        /// Profile name
-        #[arg(short, long)]
-        profile: Option<String>,
-    },
+    Set,
 
     /// Remove stored token
-    Delete {
-        /// Profile name
-        #[arg(short, long)]
-        profile: Option<String>,
-    },
+    Delete,
 
     /// Show where token is resolved from
-    Show {
-        /// Profile name
-        #[arg(short, long)]
-        profile: Option<String>,
-    },
+    Show,
 }
 
 #[derive(Clone, Copy, ValueEnum)]

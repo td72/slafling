@@ -16,7 +16,10 @@ fn main() -> Result<()> {
     match &cli.command {
         Some(cli::Command::Init) => return run_init(),
         Some(cli::Command::Token { action }) => {
-            return run_token(action);
+            let profile = cli
+                .profile
+                .or_else(|| std::env::var("SLAFLING_PROFILE").ok());
+            return run_token(action, profile.as_deref());
         }
         _ => {}
     }
@@ -122,11 +125,11 @@ fn load_token_store() -> Result<String> {
     Ok(config::resolve_token_store(&cfg))
 }
 
-fn run_token(action: &cli::TokenAction) -> Result<()> {
+fn run_token(action: &cli::TokenAction, profile: Option<&str>) -> Result<()> {
     match action {
-        cli::TokenAction::Set { profile } => run_token_set(profile.as_deref()),
-        cli::TokenAction::Delete { profile } => run_token_delete(profile.as_deref()),
-        cli::TokenAction::Show { profile } => run_token_show(profile.as_deref()),
+        cli::TokenAction::Set => run_token_set(profile),
+        cli::TokenAction::Delete => run_token_delete(profile),
+        cli::TokenAction::Show => run_token_show(profile),
     }
 }
 
@@ -155,8 +158,11 @@ fn run_token_delete(profile: Option<&str>) -> Result<()> {
 
     match token_store.as_str() {
         "keychain" => {
-            keychain::delete_token(profile)?;
             let account = profile.unwrap_or("default");
+            if keychain::get_token(profile)?.is_none() {
+                bail!("no stored token found for profile '{account}'");
+            }
+            keychain::delete_token(profile)?;
             eprintln!("deleted token from Keychain (account: {account})");
         }
         "file" => {
