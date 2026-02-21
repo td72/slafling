@@ -64,9 +64,22 @@ token = "xoxb-..."        # 別ワークスペースのトークン
 channel = "#alerts"
 ```
 
-Slack Bot Tokenには `chat:write`、`files:write`、`channels:read` のスコープが必要です。
+### Bot Token スコープ
+
+| スコープ | 用途 |
+|---|---|
+| `chat:write` | テキスト送信 (`-t`) |
+| `files:write` | ファイルアップロード (`-f`) |
+| `channels:read` | パブリックチャンネル検索 (`search`) |
+| `groups:read` | プライベートチャンネル検索 (`search --types private-channel`) |
+| `im:read` | DM検索 (`search --types im`) |
+| `mpim:read` | グループDM検索 (`search --types mpim`) |
+
+`chat:write` と `files:write` は全会話タイプ（チャンネル、DM、グループDM）で動作します。`*:read` 系スコープは `search` でのみ必要です。必要なスコープだけ追加すれば十分です。
 
 ## 使い方
+
+### Send (デフォルト)
 
 ```bash
 # テキストメッセージを送信
@@ -94,10 +107,11 @@ slafling -t "hello random"
 # 送信前に確認 (config で confirm = true の場合)
 slafling -t "重要なメッセージ"    # プロンプト表示: Send? [y/N]
 slafling -t "確認スキップ" -y     # --yes で確認をスキップ
+```
 
-# 設定ファイルのバリデーション
-slafling validate
+### Search
 
+```bash
 # チャンネル名で検索
 slafling search general
 
@@ -112,6 +126,13 @@ slafling search general -o json
 
 # fzfでチャンネルを選んでIDをコピー
 slafling search dev | fzf | cut -f3 | pbcopy
+```
+
+### Validate
+
+```bash
+# 設定ファイルのバリデーション
+slafling validate
 ```
 
 ## ライセンス

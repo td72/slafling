@@ -64,9 +64,22 @@ token = "xoxb-..."        # Different workspace token
 channel = "#alerts"
 ```
 
-The Slack Bot Token requires the `chat:write`, `files:write`, and `channels:read` scopes.
+### Bot Token Scopes
+
+| Scope | Required for |
+|---|---|
+| `chat:write` | Send text messages (`-t`) |
+| `files:write` | Upload files (`-f`) |
+| `channels:read` | Search public channels (`search`) |
+| `groups:read` | Search private channels (`search --types private-channel`) |
+| `im:read` | Search DMs (`search --types im`) |
+| `mpim:read` | Search group DMs (`search --types mpim`) |
+
+`chat:write` and `files:write` work for all conversation types (channels, DMs, group DMs). The `*:read` scopes are only needed for `search`. Only add the scopes you need.
 
 ## Usage
+
+### Send (default)
 
 ```bash
 # Send a text message
@@ -94,10 +107,11 @@ slafling -t "hello random"
 # Confirm before sending (when confirm = true in config)
 slafling -t "important message"   # prompts: Send? [y/N]
 slafling -t "skip prompt" -y      # skip confirmation with --yes
+```
 
-# Validate config file
-slafling validate
+### Search
 
+```bash
 # Search for channels by name
 slafling search general
 
@@ -112,6 +126,13 @@ slafling search general -o json
 
 # Pick a channel with fzf and copy its ID
 slafling search dev | fzf | cut -f3 | pbcopy
+```
+
+### Validate
+
+```bash
+# Validate config file
+slafling validate
 ```
 
 ## License
