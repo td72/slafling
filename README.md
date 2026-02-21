@@ -120,7 +120,7 @@ export SLAFLING_OUTPUT=json
 slafling search general
 
 # Search specific channel types
-slafling search general --types public-channel,private-channel
+slafling search general --types public_channel,private_channel
 
 # Search with a profile (uses that profile's token)
 slafling -p work search deploy

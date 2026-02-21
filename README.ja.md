@@ -120,7 +120,7 @@ export SLAFLING_OUTPUT=json
 slafling search general
 
 # チャンネルタイプを指定して検索
-slafling search general --types public-channel,private-channel
+slafling search general --types public_channel,private_channel
 
 # プロファイル指定で検索 (そのプロファイルのトークンを使用)
 slafling -p work search deploy

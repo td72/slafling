@@ -150,5 +150,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/slafling.rb
-          git commit -m "slafling v${VERSION}"
-          git push
+          if ! git diff --cached --quiet; then
+            git commit -m "slafling v${VERSION}"
+            git push
+          fi
