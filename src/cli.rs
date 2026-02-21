@@ -55,6 +55,7 @@ pub enum Command {
 }
 
 #[derive(Clone, Copy, ValueEnum)]
+#[value(rename_all = "snake_case")]
 pub enum SearchType {
     PublicChannel,
     PrivateChannel,

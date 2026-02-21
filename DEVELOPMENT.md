@@ -70,10 +70,11 @@ Artifacts are uploaded to the corresponding GitHub Release.
 
 ### Release (`release.yml`)
 
-Two-stage release process:
+Three-stage release process:
 
 1. **create-tag**: Triggered when a `release/*` branch PR is merged to `main`. Creates a Git tag and GitHub Release using a GitHub App token.
 2. **publish**: Triggered by the release event. Publishes the crate to crates.io.
+3. **homebrew**: Triggered when Build workflow completes on a `v*` tag. Updates the formula in `td72/homebrew-tap`.
 
 #### Release Procedure
 
@@ -89,6 +90,7 @@ gh pr create --title "Release v0.2.0"
 # 4. Merge the PR → tag + GitHub Release are created automatically
 # 5. Tag push triggers build.yml → artifacts uploaded to Release
 # 6. Release event triggers publish job → crate published to crates.io
+# 7. Build completion triggers homebrew job → formula updated in td72/homebrew-tap
 ```
 
 ## Infrastructure Setup (Manual)
@@ -97,7 +99,7 @@ The following must be configured manually before the release workflow will funct
 
 ### 1. GitHub App
 
-Add `slafling` to the GitHub App's repository access (same app used by vig).
+Add `slafling` and `homebrew-tap` to the GitHub App's repository access (same app used by vig).
 
 Required secrets in the repository:
 - `APP_ID` — GitHub App ID
