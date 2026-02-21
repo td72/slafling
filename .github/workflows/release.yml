@@ -6,6 +6,9 @@ on:
     branches: [main]
   release:
     types: [created]
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
 
 permissions:
   contents: write
@@ -62,3 +65,90 @@ jobs:
         run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+
+  homebrew:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: Generate token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: td72
+          repositories: homebrew-tap
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v7
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          merge-multiple: true
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v6
+        with:
+          repository: td72/homebrew-tap
+          token: ${{ steps.app-token.outputs.token }}
+          path: homebrew-tap
+
+      - name: Update Homebrew formula
+        shell: bash
+        run: |
+          VERSION="${{ github.event.workflow_run.head_branch }}"
+          VERSION="${VERSION#v}"
+          SHA_LINUX_X86=$(cut -d ' ' -f 1 slafling-x86_64-unknown-linux-gnu.tar.gz.sha256)
+          SHA_LINUX_ARM=$(cut -d ' ' -f 1 slafling-aarch64-unknown-linux-gnu.tar.gz.sha256)
+          SHA_MACOS_ARM=$(cut -d ' ' -f 1 slafling-aarch64-apple-darwin.tar.gz.sha256)
+          SHA_MACOS_X86=$(cut -d ' ' -f 1 slafling-x86_64-apple-darwin.tar.gz.sha256)
+
+          cat > homebrew-tap/Formula/slafling.rb <<FORMULA
+          class Slafling < Formula
+            desc "Fling messages to Slack"
+            homepage "https://github.com/td72/slafling"
+            license "MIT"
+            version "${VERSION}"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/td72/slafling/releases/download/v#{version}/slafling-aarch64-apple-darwin.tar.gz"
+                sha256 "${SHA_MACOS_ARM}"
+              end
+              on_intel do
+                url "https://github.com/td72/slafling/releases/download/v#{version}/slafling-x86_64-apple-darwin.tar.gz"
+                sha256 "${SHA_MACOS_X86}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/td72/slafling/releases/download/v#{version}/slafling-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LINUX_ARM}"
+              end
+              on_intel do
+                url "https://github.com/td72/slafling/releases/download/v#{version}/slafling-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LINUX_X86}"
+              end
+            end
+
+            def install
+              bin.install "slafling"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/slafling --version")
+            end
+          end
+          FORMULA
+
+      - name: Push formula update
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/slafling.rb
+          git commit -m "slafling v${VERSION}"
+          git push

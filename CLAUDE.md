@@ -22,14 +22,16 @@ cargo install --path .   # install locally
 Synchronous CLI app (no async runtime). Four modules orchestrated by `main.rs`:
 
 ```
-main.rs  →  cli.rs     (clap derive: subcommands + --text, --file, --filename, --profile)
-         →  config.rs  (TOML load from ~/.config/slafling/config.toml, 2-layer merge: default → profile)
+main.rs  →  cli.rs     (clap derive: subcommands + --text, --file, --filename, --profile, --yes, --output, --types)
+         →  config.rs  (TOML load from ~/.config/slafling/config.toml, 2-layer merge: default → profile, config validation)
          →  slack.rs   (ureq POST to chat.postMessage / conversations.list with Bearer auth)
 ```
 
-Subcommands: `search <query>` (channel search). No subcommand = send mode (original behavior).
+Subcommands: `validate` (config validation), `search <query>` (channel search). No subcommand = send mode (original behavior).
 
 Config resolution priority: profile > default section. No runtime channel override (safety-first design).
+
+Config fields: `token`, `channel`, `max_file_size`, `confirm`, `output`, `search_types`. Environment variables: `SLAFLING_PROFILE` (profile selection), `SLAFLING_OUTPUT` (search output format).
 
 stdin is read when no message argument is given; errors if stdin is a TTY.
 
