@@ -48,7 +48,7 @@ cargo install --path .
 slafling init
 ```
 
-Bot Tokenを入力すると `~/.config/slafling/config.toml` を生成し、トークンを安全に保存します（macOS Keychain + トークンファイル）。
+Bot Tokenを入力すると `~/.config/slafling/config.toml` を生成し、トークンを安全に保存します（macOS では Keychain、他プラットフォームではトークンファイル）。
 
 ### トークン管理
 

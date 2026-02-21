@@ -129,6 +129,9 @@ fn validate_config(config: &ConfigFile) -> Result<()> {
                 VALID_TOKEN_STORE_VALUES.join(", ")
             );
         }
+        if lower == "keychain" && !cfg!(target_os = "macos") {
+            bail!("token_store 'keychain' is only supported on macOS");
+        }
     }
 
     for (name, profile) in &config.profiles {

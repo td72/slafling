@@ -48,7 +48,7 @@ cargo install --path .
 slafling init
 ```
 
-This creates `~/.config/slafling/config.toml` and stores your Bot Token securely (macOS Keychain + token file).
+This creates `~/.config/slafling/config.toml` and stores your Bot Token securely (macOS Keychain on macOS, token file on other platforms).
 
 ### Token Management
 

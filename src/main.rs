@@ -112,12 +112,14 @@ fn store_token(token_store: &str, profile: Option<&str>, token_value: &str) -> R
     Ok(())
 }
 
-/// Load token_store from config file, falling back to platform default.
-fn load_token_store() -> String {
-    match config::load_config() {
-        Ok(cfg) => config::resolve_token_store(&cfg),
-        Err(_) => config::default_token_store().to_string(),
+/// Load token_store from config file, falling back to platform default if config doesn't exist.
+fn load_token_store() -> Result<String> {
+    let path = config::config_path()?;
+    if !path.exists() {
+        return Ok(config::default_token_store().to_string());
     }
+    let cfg = config::load_config()?;
+    Ok(config::resolve_token_store(&cfg))
 }
 
 fn run_token(action: &cli::TokenAction) -> Result<()> {
@@ -143,13 +145,13 @@ fn run_token_set(profile: Option<&str>) -> Result<()> {
         bail!("token is required");
     }
 
-    let token_store = load_token_store();
+    let token_store = load_token_store()?;
     store_token(&token_store, profile, token_value)?;
     Ok(())
 }
 
 fn run_token_delete(profile: Option<&str>) -> Result<()> {
-    let token_store = load_token_store();
+    let token_store = load_token_store()?;
 
     match token_store.as_str() {
         "keychain" => {
@@ -173,7 +175,7 @@ fn run_token_delete(profile: Option<&str>) -> Result<()> {
 }
 
 fn run_token_show(profile: Option<&str>) -> Result<()> {
-    let token_store = load_token_store();
+    let token_store = load_token_store()?;
     match config::describe_token_source(&token_store, profile) {
         Ok((source, location)) => {
             println!("source: {source}");
