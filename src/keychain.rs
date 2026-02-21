@@ -1,7 +1,9 @@
 use anyhow::Result;
 
+#[cfg(target_os = "macos")]
 const SERVICE: &str = "slafling";
 
+#[cfg(target_os = "macos")]
 fn account_name(profile: Option<&str>) -> &str {
     profile.unwrap_or("default")
 }
