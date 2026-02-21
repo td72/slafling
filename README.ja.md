@@ -57,7 +57,7 @@ Bot Tokenを入力すると `~/.config/slafling/config.toml` を生成し、ト�
 1. **`SLAFLING_TOKEN` 環境変数** (全プロファイル共通、CI/CD や一時的なオーバーライド用)
 2. **`token_store` で指定されたバックエンド** — Keychain (`"keychain"`, macOS デフォルト) またはトークンファイル (`"file"`, 他プラットフォームのデフォルト)
 
-トークン保存先: `~/.local/share/slafling/tokens/<プロファイル名>` (file) または macOS Keychain サービス `slafling` (keychain)。
+トークン保存先: `<data_dir>/slafling/tokens/<プロファイル名>` (file) または macOS Keychain サービス `slafling` (keychain)。`<data_dir>` は macOS では `~/Library/Application Support`、Linux では `~/.local/share`。
 
 ```bash
 # トークンを保存

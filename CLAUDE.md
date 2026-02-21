@@ -27,7 +27,7 @@ main.rs  →  cli.rs      (clap derive: subcommands + --text, --file, --filename
          →  config.rs   (TOML load from ~/.config/slafling/config.toml, 2-layer merge: default → profile, config validation)
          →  slack.rs    (ureq POST to chat.postMessage / files.getUploadURLExternal / conversations.list with Bearer auth)
          →  keychain.rs (macOS Keychain ops via keyring crate, #[cfg(target_os = "macos")], non-macOS stubs)
-         →  token.rs    (token file read/write at ~/.local/share/slafling/tokens/<profile>)
+         →  token.rs    (token file read/write at <data_dir>/slafling/tokens/<profile>, where data_dir = dirs::data_dir())
 ```
 
 Subcommands: `init` (interactive config generation), `validate` (config validation), `search <query>` (channel search), `token set/delete/show` (token management). No subcommand = send mode (original behavior).
