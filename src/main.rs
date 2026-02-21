@@ -85,8 +85,8 @@ fn run_init() -> Result<()> {
         bail!("token is required");
     }
 
-    // Store token in Keychain (macOS) and token file
-    store_token(None, token_value)?;
+    // Store token using platform default (config doesn't exist yet)
+    store_token(config::default_token_store(), None, token_value)?;
 
     // Write config without token
     config::write_init_config(&path)?;
@@ -95,24 +95,29 @@ fn run_init() -> Result<()> {
     Ok(())
 }
 
-fn store_token(profile: Option<&str>, token_value: &str) -> Result<()> {
-    // Try Keychain first (macOS only)
-    match keychain::set_token(profile, token_value) {
-        Ok(()) => {
+fn store_token(token_store: &str, profile: Option<&str>, token_value: &str) -> Result<()> {
+    match token_store {
+        "keychain" => {
+            keychain::set_token(profile, token_value)?;
             let account = profile.unwrap_or("default");
             eprintln!("token stored in Keychain (account: {account})");
         }
-        Err(e) => {
-            eprintln!("Keychain not available: {e}");
+        "file" => {
+            token::set_token(profile, token_value)?;
+            let path = token::token_path(profile)?;
+            eprintln!("token stored in {}", path.display());
         }
+        _ => bail!("invalid token_store '{token_store}'"),
     }
-
-    // Always write token file as fallback
-    token::set_token(profile, token_value)?;
-    let path = token::token_path(profile)?;
-    eprintln!("token stored in {}", path.display());
-
     Ok(())
+}
+
+/// Load token_store from config file, falling back to platform default.
+fn load_token_store() -> String {
+    match config::load_config() {
+        Ok(cfg) => config::resolve_token_store(&cfg),
+        Err(_) => config::default_token_store().to_string(),
+    }
 }
 
 fn run_token(action: &cli::TokenAction) -> Result<()> {
@@ -138,38 +143,38 @@ fn run_token_set(profile: Option<&str>) -> Result<()> {
         bail!("token is required");
     }
 
-    store_token(profile, token_value)?;
+    let token_store = load_token_store();
+    store_token(&token_store, profile, token_value)?;
     Ok(())
 }
 
 fn run_token_delete(profile: Option<&str>) -> Result<()> {
-    let mut deleted = false;
+    let token_store = load_token_store();
 
-    // Delete from Keychain
-    if let Ok(()) = keychain::delete_token(profile) {
-        let account = profile.unwrap_or("default");
-        eprintln!("deleted token from Keychain (account: {account})");
-        deleted = true;
-    }
-
-    // Delete token file
-    let path = token::token_path(profile)?;
-    if path.exists() {
-        token::delete_token(profile)?;
-        eprintln!("deleted {}", path.display());
-        deleted = true;
-    }
-
-    if !deleted {
-        let name = profile.unwrap_or("default");
-        bail!("no stored token found for profile '{name}'");
+    match token_store.as_str() {
+        "keychain" => {
+            keychain::delete_token(profile)?;
+            let account = profile.unwrap_or("default");
+            eprintln!("deleted token from Keychain (account: {account})");
+        }
+        "file" => {
+            let path = token::token_path(profile)?;
+            if !path.exists() {
+                let name = profile.unwrap_or("default");
+                bail!("no stored token found for profile '{name}'");
+            }
+            token::delete_token(profile)?;
+            eprintln!("deleted {}", path.display());
+        }
+        _ => bail!("invalid token_store '{token_store}'"),
     }
 
     Ok(())
 }
 
 fn run_token_show(profile: Option<&str>) -> Result<()> {
-    match config::describe_token_source(profile) {
+    let token_store = load_token_store();
+    match config::describe_token_source(&token_store, profile) {
         Ok((source, location)) => {
             println!("source: {source}");
             println!("location: {location}");
@@ -188,7 +193,8 @@ fn run_search(
     types: &str,
     cfg: &config::ConfigFile,
 ) -> Result<()> {
-    let token = config::resolve_token(profile)?;
+    let token_store = config::resolve_token_store(cfg);
+    let token = config::resolve_token(&token_store, profile)?;
     let format = resolve_output_format(cli_output, cfg, profile);
 
     let channels = slack::search_channels(&token, query, types)?;

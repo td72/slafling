@@ -34,12 +34,13 @@ Subcommands: `init` (interactive config generation), `validate` (config validati
 
 Config resolution priority: profile > default section. No runtime channel override (safety-first design).
 
-Config fields: `channel`, `max_file_size`, `confirm`, `output`, `search_types`. Token is **not** stored in config.toml.
+Config fields: `channel`, `max_file_size`, `confirm`, `output`, `search_types`, `token_store`. Token is **not** stored in config.toml.
+
+Token storage backend (`token_store`): `"keychain"` (default on macOS) or `"file"` (default on other platforms). Set in `[default]` section only.
 
 Token resolution priority (per profile):
-1. macOS Keychain (service=`slafling`, account=profile name or `default`)
-2. `SLAFLING_TOKEN` environment variable (shared across profiles)
-3. Token file: `~/.local/share/slafling/tokens/<profile>`
+1. `SLAFLING_TOKEN` environment variable (shared across profiles, for CI/CD and temporary overrides)
+2. Backend specified by `token_store` — Keychain or token file
 
 Environment variables: `SLAFLING_PROFILE` (profile selection), `SLAFLING_OUTPUT` (search output format), `SLAFLING_TOKEN` (token override).
 

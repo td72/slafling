@@ -22,6 +22,10 @@
 # Valid values: public_channel, private_channel, im, mpim
 # search_types = ["public_channel", "private_channel"]
 
+# Token storage backend (default: keychain on macOS, file on other platforms)
+# Valid values: keychain, file
+# token_store = "keychain"
+
 # --- Profiles ---
 # Override settings per use-case.
 # Usage: slafling --profile work / SLAFLING_PROFILE=work

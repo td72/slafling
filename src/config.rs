@@ -20,6 +20,7 @@ pub struct DefaultConfig {
     pub confirm: Option<bool>,
     pub output: Option<String>,
     pub search_types: Option<Vec<String>>,
+    pub token_store: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -67,7 +68,10 @@ pub fn parse_file_size(s: &str) -> Result<u64> {
 }
 
 pub fn generate_init_config() -> String {
-    include_str!("../config.template.toml").to_string()
+    include_str!("../config.template.toml").replace(
+        "# token_store = \"keychain\"",
+        &format!("# token_store = \"{}\"", default_token_store()),
+    )
 }
 
 pub fn write_init_config(path: &std::path::Path) -> Result<()> {
@@ -86,6 +90,15 @@ pub fn config_path() -> Result<PathBuf> {
     Ok(home.join(".config").join("slafling").join("config.toml"))
 }
 
+/// Return the platform default for token_store: "keychain" on macOS, "file" elsewhere.
+pub fn default_token_store() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "keychain"
+    } else {
+        "file"
+    }
+}
+
 pub fn load_config() -> Result<ConfigFile> {
     let path = config_path()?;
     let content = std::fs::read_to_string(&path)
@@ -98,6 +111,7 @@ pub fn load_config() -> Result<ConfigFile> {
 
 const VALID_OUTPUT_VALUES: &[&str] = &["table", "tsv", "json"];
 const VALID_SEARCH_TYPES: &[&str] = &["public_channel", "private_channel", "im", "mpim"];
+const VALID_TOKEN_STORE_VALUES: &[&str] = &["keychain", "file"];
 
 fn validate_config(config: &ConfigFile) -> Result<()> {
     validate_section_values(
@@ -105,6 +119,17 @@ fn validate_config(config: &ConfigFile) -> Result<()> {
         config.default.output.as_deref(),
         config.default.search_types.as_deref(),
     )?;
+
+    if let Some(val) = &config.default.token_store {
+        let lower = val.to_lowercase();
+        if !VALID_TOKEN_STORE_VALUES.contains(&lower.as_str()) {
+            bail!(
+                "invalid token_store '{}' in [default] (valid: {})",
+                val,
+                VALID_TOKEN_STORE_VALUES.join(", ")
+            );
+        }
+    }
 
     for (name, profile) in &config.profiles {
         validate_section_values(
@@ -151,53 +176,76 @@ fn validate_section_values(
     Ok(())
 }
 
-/// Resolve token from: 1) Keychain  2) SLAFLING_TOKEN env  3) token file
-pub fn resolve_token(profile_name: Option<&str>) -> Result<String> {
-    // 1. macOS Keychain
-    if let Some(t) = keychain::get_token(profile_name)? {
-        return Ok(t);
-    }
-
-    // 2. Environment variable (shared across profiles)
+/// Resolve token from: 1) SLAFLING_TOKEN env  2) token_store backend
+pub fn resolve_token(token_store: &str, profile_name: Option<&str>) -> Result<String> {
+    // 1. Environment variable (highest priority — for CI/CD and temporary overrides)
     if let Ok(t) = std::env::var("SLAFLING_TOKEN") {
         if !t.is_empty() {
             return Ok(t);
         }
     }
 
-    // 3. Token file
-    if let Some(t) = token::get_token(profile_name)? {
-        return Ok(t);
+    // 2. token_store backend
+    match token_store {
+        "keychain" => {
+            if let Some(t) = keychain::get_token(profile_name)? {
+                return Ok(t);
+            }
+        }
+        "file" => {
+            if let Some(t) = token::get_token(profile_name)? {
+                return Ok(t);
+            }
+        }
+        _ => bail!("invalid token_store '{token_store}'"),
     }
 
     bail!("token is not configured (use `slafling token set` or set SLAFLING_TOKEN)")
 }
 
 /// Describe where the token is currently resolved from
-pub fn describe_token_source(profile_name: Option<&str>) -> Result<(&'static str, String)> {
-    // 1. Keychain
-    if keychain::get_token(profile_name)?.is_some() {
-        return Ok(("keychain", "macOS Keychain".to_string()));
-    }
-
-    // 2. Env var
+pub fn describe_token_source(
+    token_store: &str,
+    profile_name: Option<&str>,
+) -> Result<(&'static str, String)> {
+    // 1. Env var
     if let Ok(t) = std::env::var("SLAFLING_TOKEN") {
         if !t.is_empty() {
             return Ok(("env", "SLAFLING_TOKEN".to_string()));
         }
     }
 
-    // 3. Token file
-    let path = token::token_path(profile_name)?;
-    if token::get_token(profile_name)?.is_some() {
-        return Ok(("file", path.display().to_string()));
+    // 2. token_store backend
+    match token_store {
+        "keychain" => {
+            if keychain::get_token(profile_name)?.is_some() {
+                return Ok(("keychain", "macOS Keychain".to_string()));
+            }
+        }
+        "file" => {
+            let path = token::token_path(profile_name)?;
+            if token::get_token(profile_name)?.is_some() {
+                return Ok(("file", path.display().to_string()));
+            }
+        }
+        _ => bail!("invalid token_store '{token_store}'"),
     }
 
     bail!("token is not configured (use `slafling token set` or set SLAFLING_TOKEN)")
 }
 
+pub fn resolve_token_store(config: &ConfigFile) -> String {
+    config
+        .default
+        .token_store
+        .as_deref()
+        .unwrap_or(default_token_store())
+        .to_lowercase()
+}
+
 pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<ResolvedConfig> {
-    let token = resolve_token(profile_name)?;
+    let token_store = resolve_token_store(config);
+    let token = resolve_token(&token_store, profile_name)?;
     let mut channel = config.default.channel.clone();
     let mut max_file_size_str = config.default.max_file_size.clone();
     let mut confirm = config.default.confirm.unwrap_or(false);
@@ -292,6 +340,7 @@ mod tests {
                 confirm: None,
                 output: None,
                 search_types: None,
+                token_store: None,
             },
             profiles: HashMap::new(),
         }
@@ -352,6 +401,35 @@ mod tests {
         );
         let err = validate_config(&cfg).unwrap_err();
         assert!(err.to_string().contains("profiles.work"));
+    }
+
+    #[test]
+    fn valid_token_store_values() {
+        for val in &["keychain", "file", "Keychain", "FILE"] {
+            let mut cfg = minimal_config();
+            cfg.default.token_store = Some(val.to_string());
+            assert!(
+                validate_config(&cfg).is_ok(),
+                "expected '{val}' to be valid"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_token_store_value() {
+        let mut cfg = minimal_config();
+        cfg.default.token_store = Some("redis".to_string());
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.to_string().contains("invalid token_store 'redis'"));
+    }
+
+    #[test]
+    fn default_token_store_returns_valid_value() {
+        let val = default_token_store();
+        assert!(
+            VALID_TOKEN_STORE_VALUES.contains(&val),
+            "default_token_store() returned '{val}' which is not valid"
+        );
     }
 
     #[test]
