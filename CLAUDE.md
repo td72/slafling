@@ -28,7 +28,7 @@ main.rs  →  cli.rs     (clap derive: subcommands + --text, --file, --filename,
          →  slack.rs   (ureq POST to chat.postMessage / files.getUploadURLExternal / conversations.list with Bearer auth)
 ```
 
-Subcommands: `validate` (config validation), `search <query>` (channel search). No subcommand = send mode (original behavior).
+Subcommands: `init` (interactive config generation), `validate` (config validation), `search <query>` (channel search). No subcommand = send mode (original behavior).
 
 Config resolution priority: profile > default section. No runtime channel override (safety-first design).
 

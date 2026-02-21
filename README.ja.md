@@ -42,6 +42,16 @@ cargo install --path .
 
 ## セットアップ
 
+### クイックスタート
+
+```bash
+slafling init
+```
+
+Bot Tokenを入力すると `~/.config/slafling/config.toml` を生成します。チャンネルなどの設定は後から手動で追加できます。
+
+### 手動セットアップ
+
 `~/.config/slafling/config.toml` を作成:
 
 ```toml
@@ -131,6 +141,13 @@ slafling search general -o json
 
 # fzfでチャンネルを選んでIDをコピー
 slafling search dev | fzf | cut -f3 | pbcopy
+```
+
+### Init
+
+```bash
+# 設定ファイルを対話的に作成
+slafling init
 ```
 
 ### Validate

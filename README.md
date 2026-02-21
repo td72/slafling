@@ -42,6 +42,16 @@ cargo install --path .
 
 ## Setup
 
+### Quick Start
+
+```bash
+slafling init
+```
+
+This creates `~/.config/slafling/config.toml` with your Bot Token. You can then add a channel and other settings manually.
+
+### Manual Setup
+
 Create `~/.config/slafling/config.toml`:
 
 ```toml
@@ -131,6 +141,13 @@ slafling search general -o json
 
 # Pick a channel with fzf and copy its ID
 slafling search dev | fzf | cut -f3 | pbcopy
+```
+
+### Init
+
+```bash
+# Create config file interactively
+slafling init
 ```
 
 ### Validate
