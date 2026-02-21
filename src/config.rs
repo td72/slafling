@@ -407,8 +407,8 @@ mod tests {
     }
 
     #[test]
-    fn valid_token_store_values() {
-        for val in &["keychain", "file", "Keychain", "FILE"] {
+    fn valid_token_store_file() {
+        for val in &["file", "FILE"] {
             let mut cfg = minimal_config();
             cfg.default.token_store = Some(val.to_string());
             assert!(
@@ -416,6 +416,28 @@ mod tests {
                 "expected '{val}' to be valid"
             );
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn valid_token_store_keychain() {
+        for val in &["keychain", "Keychain"] {
+            let mut cfg = minimal_config();
+            cfg.default.token_store = Some(val.to_string());
+            assert!(
+                validate_config(&cfg).is_ok(),
+                "expected '{val}' to be valid"
+            );
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn keychain_rejected_on_non_macos() {
+        let mut cfg = minimal_config();
+        cfg.default.token_store = Some("keychain".to_string());
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.to_string().contains("only supported on macOS"));
     }
 
     #[test]
