@@ -68,10 +68,11 @@ channel = "#alerts"
 
 | Scope | Required for |
 |---|---|
-| `chat:write` | Send text messages (`-t`) |
-| `files:write` | Upload files (`-f`) |
+| `chat:write` | Send text messages (`-t`) — bot must be invited to the channel |
+| `chat:write.public` | Send to public channels without being invited |
+| `files:write` | Upload files (`-f`) — bot must be invited to the channel |
 | `channels:read` | Search public channels (`search`) |
-| `groups:read` | Search private channels (`search --types private-channel`) |
+| `groups:read` | Search private channels (`search --types private_channel`) |
 | `im:read` | Search DMs (`search --types im`) |
 | `mpim:read` | Search group DMs (`search --types mpim`) |
 

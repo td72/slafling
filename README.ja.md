@@ -68,10 +68,11 @@ channel = "#alerts"
 
 | スコープ | 用途 |
 |---|---|
-| `chat:write` | テキスト送信 (`-t`) |
-| `files:write` | ファイルアップロード (`-f`) |
+| `chat:write` | テキスト送信 (`-t`) — bot をチャンネルに招待する必要あり |
+| `chat:write.public` | パブリックチャンネルへの送信（招待不要） |
+| `files:write` | ファイルアップロード (`-f`) — bot をチャンネルに招待する必要あり |
 | `channels:read` | パブリックチャンネル検索 (`search`) |
-| `groups:read` | プライベートチャンネル検索 (`search --types private-channel`) |
+| `groups:read` | プライベートチャンネル検索 (`search --types private_channel`) |
 | `im:read` | DM検索 (`search --types im`) |
 | `mpim:read` | グループDM検索 (`search --types mpim`) |
 
