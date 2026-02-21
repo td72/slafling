@@ -67,13 +67,7 @@ pub fn parse_file_size(s: &str) -> Result<u64> {
 }
 
 pub fn generate_init_config(token: &str) -> String {
-    format!(
-        "\
-[default]
-token = \"{token}\"
-# channel = \"#general\"
-"
-    )
+    include_str!("../config.template.toml").replace("{{token}}", token)
 }
 
 pub fn write_init_config(path: &std::path::Path, token: &str) -> Result<()> {
@@ -416,6 +410,12 @@ mod tests {
         };
         let token = resolve_token(&cfg, None).unwrap();
         assert_eq!(token, "xoxb-test");
+    }
+
+    #[test]
+    fn init_config_no_placeholder_remains() {
+        let content = generate_init_config("xoxb-real");
+        assert!(!content.contains("{{"), "placeholder should be replaced");
     }
 
     #[test]

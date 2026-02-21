@@ -1,0 +1,30 @@
+[default]
+# Slack Bot Token (required)
+# Obtain from https://api.slack.com/apps
+token = "{{token}}"
+
+# Target channel (e.g. "#general", "C01ABCDEF")
+# channel = "#general"
+
+# Max file upload size (default: 1GB)
+# Units: B, KB, MB, GB
+# max_file_size = "1GB"
+
+# Prompt for confirmation before sending (default: false)
+# confirm = false
+
+# Output format for the search subcommand (default: table)
+# Valid values: table, tsv, json
+# output = "table"
+
+# Channel types to search with the search subcommand
+# Valid values: public_channel, private_channel, im, mpim
+# search_types = ["public_channel", "private_channel"]
+
+# --- Profiles ---
+# Override settings per use-case.
+# Usage: slafling --profile work / SLAFLING_PROFILE=work
+#
+# [profiles.work]
+# token = "xoxb-other-token"
+# channel = "#work-channel"
