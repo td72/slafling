@@ -9,6 +9,12 @@ use clap::Parser;
 
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
+
+    // Handle init before loading config (config may not exist yet)
+    if matches!(cli.command, Some(cli::Command::Init)) {
+        return run_init();
+    }
+
     let cfg = config::load_config()?;
 
     let profile = cli
@@ -16,6 +22,7 @@ fn main() -> Result<()> {
         .or_else(|| std::env::var("SLAFLING_PROFILE").ok());
 
     match cli.command {
+        Some(cli::Command::Init) => unreachable!(),
         Some(cli::Command::Validate) => {
             let path = config::config_path()?;
             println!("{}: ok", path.display());
@@ -35,6 +42,46 @@ fn main() -> Result<()> {
         }
         None => run_send(profile.as_deref(), cli.send, &cfg),
     }
+}
+
+fn run_init() -> Result<()> {
+    let path = config::config_path()?;
+
+    if path.exists() {
+        let stdin = std::io::stdin();
+        if !stdin.is_terminal() {
+            bail!(
+                "{} already exists (run interactively to confirm overwrite)",
+                path.display()
+            );
+        }
+        eprint!("{} already exists. Overwrite? [y/N] ", path.display());
+        std::io::stderr().flush()?;
+        let mut input = String::new();
+        stdin.lock().read_line(&mut input)?;
+        if !matches!(input.trim(), "y" | "Y") {
+            bail!("aborted");
+        }
+    }
+
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        bail!("init requires interactive input (stdin must be a TTY)");
+    }
+
+    eprint!("Bot Token (xoxb-...): ");
+    std::io::stderr().flush()?;
+    let mut token = String::new();
+    stdin.lock().read_line(&mut token)?;
+    let token = token.trim();
+    if token.is_empty() {
+        bail!("token is required");
+    }
+
+    config::write_init_config(&path, token)?;
+
+    println!("created {}", path.display());
+    Ok(())
 }
 
 fn run_search(

@@ -36,6 +36,9 @@ pub struct SendArgs {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Initialize config file
+    Init,
+
     /// Validate config file
     Validate,
 

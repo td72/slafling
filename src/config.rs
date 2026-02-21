@@ -14,7 +14,7 @@ pub struct ConfigFile {
 #[derive(Deserialize)]
 pub struct DefaultConfig {
     pub token: String,
-    pub channel: String,
+    pub channel: Option<String>,
     pub max_file_size: Option<String>,
     pub confirm: Option<bool>,
     pub output: Option<String>,
@@ -64,6 +64,27 @@ pub fn parse_file_size(s: &str) -> Result<u64> {
     };
 
     Ok((num * multiplier as f64) as u64)
+}
+
+pub fn generate_init_config(token: &str) -> String {
+    format!(
+        "\
+[default]
+token = \"{token}\"
+# channel = \"#general\"
+"
+    )
+}
+
+pub fn write_init_config(path: &std::path::Path, token: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create directory {}", parent.display()))?;
+    }
+    let content = generate_init_config(token);
+    std::fs::write(path, &content)
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
 }
 
 pub fn config_path() -> Result<PathBuf> {
@@ -151,7 +172,7 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
             token = t.clone();
         }
         if let Some(c) = &profile.channel {
-            channel = c.clone();
+            channel = Some(c.clone());
         }
         if profile.max_file_size.is_some() {
             max_file_size_str = profile.max_file_size.clone();
@@ -164,9 +185,10 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
     if token.is_empty() {
         bail!("token is not configured");
     }
-    if channel.is_empty() {
-        bail!("channel is not configured");
-    }
+    let channel = match channel {
+        Some(c) if !c.is_empty() => c,
+        _ => bail!("channel is not configured"),
+    };
 
     let max_file_size = match max_file_size_str {
         Some(s) => parse_file_size(&s)?,
@@ -253,7 +275,7 @@ mod tests {
         ConfigFile {
             default: DefaultConfig {
                 token: "xoxb-test".to_string(),
-                channel: "#general".to_string(),
+                channel: Some("#general".to_string()),
                 max_file_size: None,
                 confirm: None,
                 output: None,
@@ -325,5 +347,81 @@ mod tests {
     fn none_values_are_valid() {
         let cfg = minimal_config();
         assert!(validate_config(&cfg).is_ok());
+    }
+
+    #[test]
+    fn init_generates_valid_toml() {
+        let toml_str = generate_init_config("xoxb-test-token");
+        let parsed: ConfigFile = toml::from_str(&toml_str).expect("generated TOML should parse");
+        assert_eq!(parsed.default.token, "xoxb-test-token");
+    }
+
+    #[test]
+    fn init_writes_config_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_init_config(&path, "xoxb-abc").unwrap();
+        assert!(path.exists());
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("xoxb-abc"));
+    }
+
+    #[test]
+    fn init_creates_parent_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a").join("b").join("config.toml");
+        write_init_config(&path, "xoxb-nested").unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn init_overwrites_existing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_init_config(&path, "xoxb-old").unwrap();
+        write_init_config(&path, "xoxb-new").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("xoxb-new"));
+        assert!(!content.contains("xoxb-old"));
+    }
+
+    #[test]
+    fn resolve_without_channel_fails() {
+        let cfg = ConfigFile {
+            default: DefaultConfig {
+                token: "xoxb-test".to_string(),
+                channel: None,
+                max_file_size: None,
+                confirm: None,
+                output: None,
+                search_types: None,
+            },
+            profiles: HashMap::new(),
+        };
+        assert!(resolve(&cfg, None).is_err());
+    }
+
+    #[test]
+    fn resolve_token_without_channel_ok() {
+        let cfg = ConfigFile {
+            default: DefaultConfig {
+                token: "xoxb-test".to_string(),
+                channel: None,
+                max_file_size: None,
+                confirm: None,
+                output: None,
+                search_types: None,
+            },
+            profiles: HashMap::new(),
+        };
+        let token = resolve_token(&cfg, None).unwrap();
+        assert_eq!(token, "xoxb-test");
+    }
+
+    #[test]
+    fn toml_without_channel_parses() {
+        let toml_str = generate_init_config("xoxb-tok");
+        let parsed: ConfigFile = toml::from_str(&toml_str).expect("should parse without channel");
+        assert!(parsed.default.channel.is_none());
     }
 }
