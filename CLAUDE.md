@@ -32,6 +32,8 @@ main.rs  →  cli.rs      (clap derive: subcommands + --text, --file, --filename
 
 Subcommands: `init` (interactive config generation), `validate` (config validation), `search <query>` (channel search), `token set/delete/show` (token management). No subcommand = send mode (original behavior).
 
+`-p/--profile` is a global flag (works for all subcommands including `token`). Profile name validation rejects empty, `/`, `\`, `..`, and null characters to prevent path traversal.
+
 Config resolution priority: profile > default section. No runtime channel override (safety-first design).
 
 Config fields: `channel`, `max_file_size`, `confirm`, `output`, `search_types`, `token_store`. Token is **not** stored in config.toml.

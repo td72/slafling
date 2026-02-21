@@ -174,6 +174,8 @@ slafling init
 
 ### Token
 
+`-p/--profile` and `SLAFLING_PROFILE` work for all subcommands including `token`.
+
 ```bash
 # Store token interactively
 slafling token set

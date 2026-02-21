@@ -174,6 +174,8 @@ slafling init
 
 ### Token
 
+`-p/--profile` と `SLAFLING_PROFILE` は `token` を含む全サブコマンドで使用可能です。
+
 ```bash
 # トークンを対話的に保存
 slafling token set
