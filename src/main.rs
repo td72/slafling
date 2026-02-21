@@ -1,6 +1,8 @@
 mod cli;
 mod config;
+mod keychain;
 mod slack;
+mod token;
 
 use std::io::{BufRead, IsTerminal, Read, Write};
 
@@ -10,9 +12,13 @@ use clap::Parser;
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
-    // Handle init before loading config (config may not exist yet)
-    if matches!(cli.command, Some(cli::Command::Init)) {
-        return run_init();
+    // Handle init and token before loading config (config may not exist yet)
+    match &cli.command {
+        Some(cli::Command::Init) => return run_init(),
+        Some(cli::Command::Token { action }) => {
+            return run_token(action);
+        }
+        _ => {}
     }
 
     let cfg = config::load_config()?;
@@ -23,6 +29,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Some(cli::Command::Init) => unreachable!(),
+        Some(cli::Command::Token { .. }) => unreachable!(),
         Some(cli::Command::Validate) => {
             let path = config::config_path()?;
             println!("{}: ok", path.display());
@@ -71,16 +78,106 @@ fn run_init() -> Result<()> {
 
     eprint!("Bot Token (xoxb-...): ");
     std::io::stderr().flush()?;
-    let mut token = String::new();
-    stdin.lock().read_line(&mut token)?;
-    let token = token.trim();
-    if token.is_empty() {
+    let mut token_input = String::new();
+    stdin.lock().read_line(&mut token_input)?;
+    let token_value = token_input.trim();
+    if token_value.is_empty() {
         bail!("token is required");
     }
 
-    config::write_init_config(&path, token)?;
+    // Store token in Keychain (macOS) and token file
+    store_token(None, token_value)?;
+
+    // Write config without token
+    config::write_init_config(&path)?;
 
     println!("created {}", path.display());
+    Ok(())
+}
+
+fn store_token(profile: Option<&str>, token_value: &str) -> Result<()> {
+    // Try Keychain first (macOS only)
+    match keychain::set_token(profile, token_value) {
+        Ok(()) => {
+            let account = profile.unwrap_or("default");
+            eprintln!("token stored in Keychain (account: {account})");
+        }
+        Err(e) => {
+            eprintln!("Keychain not available: {e}");
+        }
+    }
+
+    // Always write token file as fallback
+    token::set_token(profile, token_value)?;
+    let path = token::token_path(profile)?;
+    eprintln!("token stored in {}", path.display());
+
+    Ok(())
+}
+
+fn run_token(action: &cli::TokenAction) -> Result<()> {
+    match action {
+        cli::TokenAction::Set { profile } => run_token_set(profile.as_deref()),
+        cli::TokenAction::Delete { profile } => run_token_delete(profile.as_deref()),
+        cli::TokenAction::Show { profile } => run_token_show(profile.as_deref()),
+    }
+}
+
+fn run_token_set(profile: Option<&str>) -> Result<()> {
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        bail!("token set requires interactive input (stdin must be a TTY)");
+    }
+
+    eprint!("Bot Token (xoxb-...): ");
+    std::io::stderr().flush()?;
+    let mut token_input = String::new();
+    stdin.lock().read_line(&mut token_input)?;
+    let token_value = token_input.trim();
+    if token_value.is_empty() {
+        bail!("token is required");
+    }
+
+    store_token(profile, token_value)?;
+    Ok(())
+}
+
+fn run_token_delete(profile: Option<&str>) -> Result<()> {
+    let mut deleted = false;
+
+    // Delete from Keychain
+    if let Ok(()) = keychain::delete_token(profile) {
+        let account = profile.unwrap_or("default");
+        eprintln!("deleted token from Keychain (account: {account})");
+        deleted = true;
+    }
+
+    // Delete token file
+    let path = token::token_path(profile)?;
+    if path.exists() {
+        token::delete_token(profile)?;
+        eprintln!("deleted {}", path.display());
+        deleted = true;
+    }
+
+    if !deleted {
+        let name = profile.unwrap_or("default");
+        bail!("no stored token found for profile '{name}'");
+    }
+
+    Ok(())
+}
+
+fn run_token_show(profile: Option<&str>) -> Result<()> {
+    match config::describe_token_source(profile) {
+        Ok((source, location)) => {
+            println!("source: {source}");
+            println!("location: {location}");
+        }
+        Err(e) => {
+            println!("not configured: {e}");
+        }
+    }
     Ok(())
 }
 
@@ -91,7 +188,7 @@ fn run_search(
     types: &str,
     cfg: &config::ConfigFile,
 ) -> Result<()> {
-    let token = config::resolve_token(cfg, profile)?;
+    let token = config::resolve_token(profile)?;
     let format = resolve_output_format(cli_output, cfg, profile);
 
     let channels = slack::search_channels(&token, query, types)?;

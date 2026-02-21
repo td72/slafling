@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
+use crate::{keychain, token};
+
 #[derive(Deserialize)]
 pub struct ConfigFile {
     pub default: DefaultConfig,
@@ -13,7 +15,6 @@ pub struct ConfigFile {
 
 #[derive(Deserialize)]
 pub struct DefaultConfig {
-    pub token: String,
     pub channel: Option<String>,
     pub max_file_size: Option<String>,
     pub confirm: Option<bool>,
@@ -23,7 +24,6 @@ pub struct DefaultConfig {
 
 #[derive(Deserialize)]
 pub struct Profile {
-    pub token: Option<String>,
     pub channel: Option<String>,
     pub max_file_size: Option<String>,
     pub confirm: Option<bool>,
@@ -66,16 +66,16 @@ pub fn parse_file_size(s: &str) -> Result<u64> {
     Ok((num * multiplier as f64) as u64)
 }
 
-pub fn generate_init_config(token: &str) -> String {
-    include_str!("../config.template.toml").replace("{{token}}", token)
+pub fn generate_init_config() -> String {
+    include_str!("../config.template.toml").to_string()
 }
 
-pub fn write_init_config(path: &std::path::Path, token: &str) -> Result<()> {
+pub fn write_init_config(path: &std::path::Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("failed to create directory {}", parent.display()))?;
     }
-    let content = generate_init_config(token);
+    let content = generate_init_config();
     std::fs::write(path, &content)
         .with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
@@ -151,8 +151,53 @@ fn validate_section_values(
     Ok(())
 }
 
+/// Resolve token from: 1) Keychain  2) SLAFLING_TOKEN env  3) token file
+pub fn resolve_token(profile_name: Option<&str>) -> Result<String> {
+    // 1. macOS Keychain
+    if let Some(t) = keychain::get_token(profile_name)? {
+        return Ok(t);
+    }
+
+    // 2. Environment variable (shared across profiles)
+    if let Ok(t) = std::env::var("SLAFLING_TOKEN") {
+        if !t.is_empty() {
+            return Ok(t);
+        }
+    }
+
+    // 3. Token file
+    if let Some(t) = token::get_token(profile_name)? {
+        return Ok(t);
+    }
+
+    bail!("token is not configured (use `slafling token set` or set SLAFLING_TOKEN)")
+}
+
+/// Describe where the token is currently resolved from
+pub fn describe_token_source(profile_name: Option<&str>) -> Result<(&'static str, String)> {
+    // 1. Keychain
+    if keychain::get_token(profile_name)?.is_some() {
+        return Ok(("keychain", "macOS Keychain".to_string()));
+    }
+
+    // 2. Env var
+    if let Ok(t) = std::env::var("SLAFLING_TOKEN") {
+        if !t.is_empty() {
+            return Ok(("env", "SLAFLING_TOKEN".to_string()));
+        }
+    }
+
+    // 3. Token file
+    let path = token::token_path(profile_name)?;
+    if token::get_token(profile_name)?.is_some() {
+        return Ok(("file", path.display().to_string()));
+    }
+
+    bail!("token is not configured (use `slafling token set` or set SLAFLING_TOKEN)")
+}
+
 pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<ResolvedConfig> {
-    let mut token = config.default.token.clone();
+    let token = resolve_token(profile_name)?;
     let mut channel = config.default.channel.clone();
     let mut max_file_size_str = config.default.max_file_size.clone();
     let mut confirm = config.default.confirm.unwrap_or(false);
@@ -162,9 +207,6 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
             .profiles
             .get(name)
             .with_context(|| format!("profile '{}' not found in config", name))?;
-        if let Some(t) = &profile.token {
-            token = t.clone();
-        }
         if let Some(c) = &profile.channel {
             channel = Some(c.clone());
         }
@@ -176,9 +218,6 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
         }
     }
 
-    if token.is_empty() {
-        bail!("token is not configured");
-    }
     let channel = match channel {
         Some(c) if !c.is_empty() => c,
         _ => bail!("channel is not configured"),
@@ -195,26 +234,6 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
         max_file_size,
         confirm,
     })
-}
-
-pub fn resolve_token(config: &ConfigFile, profile_name: Option<&str>) -> Result<String> {
-    let mut token = config.default.token.clone();
-
-    if let Some(name) = profile_name {
-        let profile = config
-            .profiles
-            .get(name)
-            .with_context(|| format!("profile '{}' not found in config", name))?;
-        if let Some(t) = &profile.token {
-            token = t.clone();
-        }
-    }
-
-    if token.is_empty() {
-        bail!("token is not configured");
-    }
-
-    Ok(token)
 }
 
 pub fn resolve_search_types(config: &ConfigFile, profile_name: Option<&str>) -> Option<String> {
@@ -268,7 +287,6 @@ mod tests {
     fn minimal_config() -> ConfigFile {
         ConfigFile {
             default: DefaultConfig {
-                token: "xoxb-test".to_string(),
                 channel: Some("#general".to_string()),
                 max_file_size: None,
                 confirm: None,
@@ -325,7 +343,6 @@ mod tests {
         cfg.profiles.insert(
             "work".to_string(),
             Profile {
-                token: None,
                 channel: None,
                 max_file_size: None,
                 confirm: None,
@@ -345,26 +362,27 @@ mod tests {
 
     #[test]
     fn init_generates_valid_toml() {
-        let toml_str = generate_init_config("xoxb-test-token");
+        let toml_str = generate_init_config();
         let parsed: ConfigFile = toml::from_str(&toml_str).expect("generated TOML should parse");
-        assert_eq!(parsed.default.token, "xoxb-test-token");
+        assert!(parsed.default.channel.is_none());
     }
 
     #[test]
     fn init_writes_config_file() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
-        write_init_config(&path, "xoxb-abc").unwrap();
+        write_init_config(&path).unwrap();
         assert!(path.exists());
         let content = std::fs::read_to_string(&path).unwrap();
-        assert!(content.contains("xoxb-abc"));
+        assert!(content.contains("[default]"));
+        assert!(!content.contains("token ="));
     }
 
     #[test]
     fn init_creates_parent_dirs() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a").join("b").join("config.toml");
-        write_init_config(&path, "xoxb-nested").unwrap();
+        write_init_config(&path).unwrap();
         assert!(path.exists());
     }
 
@@ -372,55 +390,25 @@ mod tests {
     fn init_overwrites_existing() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
-        write_init_config(&path, "xoxb-old").unwrap();
-        write_init_config(&path, "xoxb-new").unwrap();
+        std::fs::write(&path, "old content").unwrap();
+        write_init_config(&path).unwrap();
         let content = std::fs::read_to_string(&path).unwrap();
-        assert!(content.contains("xoxb-new"));
-        assert!(!content.contains("xoxb-old"));
+        assert!(content.contains("[default]"));
+        assert!(!content.contains("old content"));
     }
 
     #[test]
-    fn resolve_without_channel_fails() {
-        let cfg = ConfigFile {
-            default: DefaultConfig {
-                token: "xoxb-test".to_string(),
-                channel: None,
-                max_file_size: None,
-                confirm: None,
-                output: None,
-                search_types: None,
-            },
-            profiles: HashMap::new(),
-        };
-        assert!(resolve(&cfg, None).is_err());
-    }
-
-    #[test]
-    fn resolve_token_without_channel_ok() {
-        let cfg = ConfigFile {
-            default: DefaultConfig {
-                token: "xoxb-test".to_string(),
-                channel: None,
-                max_file_size: None,
-                confirm: None,
-                output: None,
-                search_types: None,
-            },
-            profiles: HashMap::new(),
-        };
-        let token = resolve_token(&cfg, None).unwrap();
-        assert_eq!(token, "xoxb-test");
-    }
-
-    #[test]
-    fn init_config_no_placeholder_remains() {
-        let content = generate_init_config("xoxb-real");
-        assert!(!content.contains("{{"), "placeholder should be replaced");
+    fn init_config_has_no_token_field() {
+        let content = generate_init_config();
+        assert!(
+            !content.contains("token ="),
+            "config should not contain token field"
+        );
     }
 
     #[test]
     fn toml_without_channel_parses() {
-        let toml_str = generate_init_config("xoxb-tok");
+        let toml_str = generate_init_config();
         let parsed: ConfigFile = toml::from_str(&toml_str).expect("should parse without channel");
         assert!(parsed.default.channel.is_none());
     }

@@ -55,6 +55,36 @@ pub enum Command {
         #[arg(long, value_delimiter = ',')]
         types: Option<Vec<SearchType>>,
     },
+
+    /// Manage token storage
+    Token {
+        #[command(subcommand)]
+        action: TokenAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TokenAction {
+    /// Store token in Keychain (macOS) or token file
+    Set {
+        /// Profile name
+        #[arg(short, long)]
+        profile: Option<String>,
+    },
+
+    /// Remove stored token
+    Delete {
+        /// Profile name
+        #[arg(short, long)]
+        profile: Option<String>,
+    },
+
+    /// Show where token is resolved from
+    Show {
+        /// Profile name
+        #[arg(short, long)]
+        profile: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]

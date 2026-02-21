@@ -1,8 +1,9 @@
-[default]
-# Slack Bot Token (required)
-# Obtain from https://api.slack.com/apps
-token = "{{token}}"
+# Token is managed separately (not stored in this file).
+# Use: slafling token set
+# Or set SLAFLING_TOKEN env var.
+# See: slafling token show
 
+[default]
 # Target channel (e.g. "#general", "C01ABCDEF")
 # channel = "#general"
 
@@ -26,5 +27,4 @@ token = "{{token}}"
 # Usage: slafling --profile work / SLAFLING_PROFILE=work
 #
 # [profiles.work]
-# token = "xoxb-other-token"
 # channel = "#work-channel"
