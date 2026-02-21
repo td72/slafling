@@ -42,7 +42,7 @@ const KB: u64 = 1_024;
 const MB: u64 = 1_048_576;
 const GB: u64 = 1_073_741_824;
 
-const DEFAULT_MAX_FILE_SIZE: u64 = GB; // Slack limit
+const DEFAULT_MAX_FILE_SIZE: u64 = 100 * MB; // Slack API max: 1GB
 
 pub fn parse_file_size(s: &str) -> Result<u64> {
     let s = s.trim();

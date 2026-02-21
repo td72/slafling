@@ -6,9 +6,9 @@ token = "{{token}}"
 # Target channel (e.g. "#general", "C01ABCDEF")
 # channel = "#general"
 
-# Max file upload size (default: 1GB)
+# Max file upload size (default: 100MB, Slack API max: 1GB)
 # Units: B, KB, MB, GB
-# max_file_size = "1GB"
+# max_file_size = "100MB"
 
 # Prompt for confirmation before sending (default: false)
 # confirm = false
