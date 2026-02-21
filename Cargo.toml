@@ -3,6 +3,14 @@ name = "slafling"
 version = "0.1.0"
 edition = "2021"
 description = "Fling messages to Slack"
+authors = ["td72"]
+license = "MIT"
+repository = "https://github.com/td72/slafling"
+homepage = "https://github.com/td72/slafling"
+readme = "README.md"
+keywords = ["slack", "cli", "message", "bot"]
+categories = ["command-line-utilities"]
+exclude = [".github/"]
 
 [dependencies]
 anyhow = "1"
@@ -12,3 +20,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
 ureq = { version = "3", features = ["json"] }
+
+[profile.release]
+strip = true
+lto = true
