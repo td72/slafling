@@ -12,6 +12,7 @@ slafling — a CLI tool that flings messages to Slack. Reads from arguments or s
 cargo build              # compile
 cargo build --release    # optimized binary
 cargo check              # type-check without building
+cargo test               # run tests
 cargo clippy             # lint
 cargo fmt                # format
 cargo install --path .   # install locally
@@ -24,7 +25,7 @@ Synchronous CLI app (no async runtime). Four modules orchestrated by `main.rs`:
 ```
 main.rs  →  cli.rs     (clap derive: subcommands + --text, --file, --filename, --profile, --yes, --output, --types)
          →  config.rs  (TOML load from ~/.config/slafling/config.toml, 2-layer merge: default → profile, config validation)
-         →  slack.rs   (ureq POST to chat.postMessage / conversations.list with Bearer auth)
+         →  slack.rs   (ureq POST to chat.postMessage / files.getUploadURLExternal / conversations.list with Bearer auth)
 ```
 
 Subcommands: `validate` (config validation), `search <query>` (channel search). No subcommand = send mode (original behavior).

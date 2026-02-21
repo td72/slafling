@@ -115,6 +115,10 @@ slafling -t "skip prompt" -y      # skip confirmation with --yes
 # Search for channels by name
 slafling search general
 
+# Override output format via environment variable
+export SLAFLING_OUTPUT=json
+slafling search general
+
 # Search specific channel types
 slafling search general --types public-channel,private-channel
 

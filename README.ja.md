@@ -115,6 +115,10 @@ slafling -t "確認スキップ" -y     # --yes で確認をスキップ
 # チャンネル名で検索
 slafling search general
 
+# 環境変数で出力形式を指定
+export SLAFLING_OUTPUT=json
+slafling search general
+
 # チャンネルタイプを指定して検索
 slafling search general --types public-channel,private-channel
 
