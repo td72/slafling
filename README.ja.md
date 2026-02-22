@@ -52,10 +52,9 @@ Bot Tokenを入力すると `~/.config/slafling/config.toml` を生成し、ト�
 
 ### トークン管理
 
-トークンは `config.toml` には**保存されません**。以下の優先順位で解決されます:
+トークンは `config.toml` には**保存されません**。`token_store` で指定されたバックエンドから解決されます — Keychain (`"keychain"`, macOS デフォルト) またはトークンファイル (`"file"`, 他プラットフォームのデフォルト)。
 
-1. **`SLAFLING_TOKEN` 環境変数** (全プロファイル共通、CI/CD や一時的なオーバーライド用)
-2. **`token_store` で指定されたバックエンド** — Keychain (`"keychain"`, macOS デフォルト) またはトークンファイル (`"file"`, 他プラットフォームのデフォルト)
+Headless モードでは `SLAFLING_TOKEN` 環境変数が代わりに使用されます。
 
 トークン保存先: `<data_dir>/slafling/tokens/<プロファイル名>` (file) または macOS Keychain サービス `slafling` (keychain)。`<data_dir>` は macOS では `~/Library/Application Support`、Linux では `~/.local/share`。
 
@@ -199,21 +198,24 @@ slafling token delete -p work
 slafling validate
 ```
 
+### 環境変数
+
+| 変数 | 説明 | 利用可能なモード |
+|---|---|---|
+| `SLAFLING_PROFILE` | プロファイル選択 | 通常 |
+| `SLAFLING_TOKEN` | Bot トークン | Headless |
+| `SLAFLING_OUTPUT` | 検索の出力形式 (`table`, `tsv`, `json`) | 通常, Headless |
+| `SLAFLING_HEADLESS` | Headless モード有効化 (`1`, `true`, `yes`) | — |
+| `SLAFLING_CHANNEL` | 送信先チャンネル (`#channel` or `C01ABCDEF`) | Headless |
+| `SLAFLING_MAX_FILE_SIZE` | ファイルサイズ上限 (`100MB`, `1GB` 等) | 通常, Headless |
+| `SLAFLING_CONFIRM` | 送信前に確認 (`true`, `1`, `yes`) | 通常, Headless |
+| `SLAFLING_SEARCH_TYPES` | 検索するチャンネルタイプ (カンマ区切り) | 通常, Headless |
+
 ### Headless モード
 
-設定ファイルなしで動作 — すべての設定を環境変数から取得します。CI/CD、Docker、cron、その他の非対話環境で便利です。
+設定ファイルなしで動作 — すべての設定を環境変数から取得します（上記参照）。CI/CD、Docker、cron、その他の非対話環境で便利です。
 
-`--headless` フラグまたは `SLAFLING_HEADLESS=1` 環境変数で有効化。
-
-| 変数 | 必須? | デフォルト | 形式 |
-|---|---|---|---|
-| `SLAFLING_HEADLESS` | — (フラグの代替) | 未設定 | `1`, `true`, `yes` |
-| `SLAFLING_TOKEN` | Yes | — | `xoxb-...` |
-| `SLAFLING_CHANNEL` | Yes (送信時) | — | `#channel` or `C01ABCDEF` |
-| `SLAFLING_MAX_FILE_SIZE` | No | `100MB` | `100MB`, `1GB` 等 |
-| `SLAFLING_CONFIRM` | No | `false` | `true`, `1`, `yes` |
-| `SLAFLING_OUTPUT` | No | 自動判定 | `table`, `tsv`, `json` |
-| `SLAFLING_SEARCH_TYPES` | No | `public_channel` | カンマ区切り |
+`--headless` フラグまたは `SLAFLING_HEADLESS=1` で有効化。`SLAFLING_TOKEN` と `SLAFLING_CHANNEL` (送信時) が必須です。
 
 ```bash
 # メッセージを送信

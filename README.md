@@ -52,10 +52,9 @@ This creates `~/.config/slafling/config.toml` and stores your Bot Token securely
 
 ### Token Management
 
-Tokens are **not** stored in `config.toml`. They are resolved in this order:
+Tokens are **not** stored in `config.toml`. They are resolved from the backend specified by `token_store` — Keychain (`"keychain"`, default on macOS) or token file (`"file"`, default on other platforms).
 
-1. **`SLAFLING_TOKEN` environment variable** (shared across profiles, for CI/CD and temporary overrides)
-2. **Backend specified by `token_store`** — Keychain (`"keychain"`, default on macOS) or token file (`"file"`, default on other platforms)
+In headless mode, `SLAFLING_TOKEN` environment variable is used instead.
 
 Token storage location: `<data_dir>/slafling/tokens/<profile>` (file) or macOS Keychain service `slafling` (keychain). `<data_dir>` is `~/Library/Application Support` on macOS, `~/.local/share` on Linux.
 
@@ -199,21 +198,24 @@ slafling token delete -p work
 slafling validate
 ```
 
+### Environment Variables
+
+| Variable | Description | Available in |
+|---|---|---|
+| `SLAFLING_PROFILE` | Profile selection | Normal |
+| `SLAFLING_TOKEN` | Bot token | Headless |
+| `SLAFLING_OUTPUT` | Search output format (`table`, `tsv`, `json`) | Normal, Headless |
+| `SLAFLING_HEADLESS` | Enable headless mode (`1`, `true`, `yes`) | — |
+| `SLAFLING_CHANNEL` | Channel to send to (`#channel` or `C01ABCDEF`) | Headless |
+| `SLAFLING_MAX_FILE_SIZE` | File size limit (`100MB`, `1GB`, etc.) | Normal, Headless |
+| `SLAFLING_CONFIRM` | Prompt before sending (`true`, `1`, `yes`) | Normal, Headless |
+| `SLAFLING_SEARCH_TYPES` | Channel types for search (comma-separated) | Normal, Headless |
+
 ### Headless Mode
 
-Run without a config file — all settings come from environment variables. Useful for CI/CD, Docker, cron, and other non-interactive environments.
+Run without a config file — all settings come from environment variables (see above). Useful for CI/CD, Docker, cron, and other non-interactive environments.
 
-Enable with `--headless` flag or `SLAFLING_HEADLESS=1` environment variable.
-
-| Variable | Required? | Default | Format |
-|---|---|---|---|
-| `SLAFLING_HEADLESS` | — (flag alternative) | unset | `1`, `true`, `yes` |
-| `SLAFLING_TOKEN` | Yes | — | `xoxb-...` |
-| `SLAFLING_CHANNEL` | Yes (send) | — | `#channel` or `C01ABCDEF` |
-| `SLAFLING_MAX_FILE_SIZE` | No | `100MB` | `100MB`, `1GB`, etc. |
-| `SLAFLING_CONFIRM` | No | `false` | `true`, `1`, `yes` |
-| `SLAFLING_OUTPUT` | No | auto-detect | `table`, `tsv`, `json` |
-| `SLAFLING_SEARCH_TYPES` | No | `public_channel` | comma-separated |
+Enable with `--headless` flag or `SLAFLING_HEADLESS=1`. Requires `SLAFLING_TOKEN` and `SLAFLING_CHANNEL` (for send).
 
 ```bash
 # Send a message

@@ -180,16 +180,8 @@ fn validate_section_values(
     Ok(())
 }
 
-/// Resolve token from: 1) SLAFLING_TOKEN env  2) token_store backend
+/// Resolve token from token_store backend (keychain or file).
 pub fn resolve_token(token_store: &str, profile_name: Option<&str>) -> Result<String> {
-    // 1. Environment variable (highest priority — for CI/CD and temporary overrides)
-    if let Ok(t) = std::env::var("SLAFLING_TOKEN") {
-        if !t.is_empty() {
-            return Ok(t);
-        }
-    }
-
-    // 2. token_store backend
     match token_store {
         "keychain" => {
             if let Some(t) = keychain::get_token(profile_name)? {
@@ -204,7 +196,7 @@ pub fn resolve_token(token_store: &str, profile_name: Option<&str>) -> Result<St
         _ => bail!("invalid token_store '{token_store}'"),
     }
 
-    bail!("token is not configured (use `slafling token set` or set SLAFLING_TOKEN)")
+    bail!("token is not configured (use `slafling token set`)")
 }
 
 /// Describe where the token is currently resolved from
@@ -212,14 +204,6 @@ pub fn describe_token_source(
     token_store: &str,
     profile_name: Option<&str>,
 ) -> Result<(&'static str, String)> {
-    // 1. Env var
-    if let Ok(t) = std::env::var("SLAFLING_TOKEN") {
-        if !t.is_empty() {
-            return Ok(("env", "SLAFLING_TOKEN".to_string()));
-        }
-    }
-
-    // 2. token_store backend
     match token_store {
         "keychain" => {
             if keychain::get_token(profile_name)?.is_some() {
@@ -235,7 +219,7 @@ pub fn describe_token_source(
         _ => bail!("invalid token_store '{token_store}'"),
     }
 
-    bail!("token is not configured (use `slafling token set` or set SLAFLING_TOKEN)")
+    bail!("token is not configured (use `slafling token set`)")
 }
 
 pub fn resolve_token_store(config: &ConfigFile) -> String {
@@ -270,6 +254,18 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
         }
     }
 
+    // Env var overrides (highest priority)
+    if let Ok(val) = std::env::var("SLAFLING_MAX_FILE_SIZE") {
+        if !val.is_empty() {
+            max_file_size_str = Some(val);
+        }
+    }
+    if let Ok(val) = std::env::var("SLAFLING_CONFIRM") {
+        if !val.is_empty() {
+            confirm = is_truthy(&val);
+        }
+    }
+
     let channel = match channel {
         Some(c) if !c.is_empty() => c,
         _ => bail!("channel is not configured"),
@@ -289,6 +285,11 @@ pub fn resolve(config: &ConfigFile, profile_name: Option<&str>) -> Result<Resolv
 }
 
 pub fn resolve_search_types(config: &ConfigFile, profile_name: Option<&str>) -> Option<String> {
+    // Env var override (highest priority)
+    if let Some(val) = resolve_search_types_from_env() {
+        return Some(val);
+    }
+
     let mut search_types = config.default.search_types.clone();
 
     if let Some(name) = profile_name {
@@ -371,7 +372,7 @@ pub fn resolve_token_from_env() -> Result<String> {
         .context("in headless mode, SLAFLING_TOKEN must be set")
 }
 
-/// Resolve search_types from SLAFLING_SEARCH_TYPES env var (headless mode).
+/// Resolve search_types from SLAFLING_SEARCH_TYPES env var.
 pub fn resolve_search_types_from_env() -> Option<String> {
     std::env::var("SLAFLING_SEARCH_TYPES")
         .ok()
@@ -611,23 +612,18 @@ mod tests {
 
     #[test]
     fn resolve_token_invalid_store() {
-        let prev = std::env::var("SLAFLING_TOKEN").ok();
-        std::env::remove_var("SLAFLING_TOKEN");
-        let result = resolve_token("redis", None);
-        match prev {
-            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
-            None => std::env::remove_var("SLAFLING_TOKEN"),
-        }
-        let err = result.unwrap_err();
+        let err = resolve_token("redis", None).unwrap_err();
         assert!(err.to_string().contains("invalid token_store 'redis'"));
     }
 
-    // Note: env var tests are not thread-safe; they may flake under parallel execution.
+    // SLAFLING_TOKEN is only available in headless mode (safety-first design).
+    // resolve_token() and describe_token_source() no longer check SLAFLING_TOKEN.
+
     #[test]
-    fn resolve_token_env_takes_priority() {
+    fn resolve_token_from_env_success() {
         let prev = std::env::var("SLAFLING_TOKEN").ok();
         std::env::set_var("SLAFLING_TOKEN", "xoxb-env-test");
-        let result = resolve_token("file", None);
+        let result = resolve_token_from_env();
         match prev {
             Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
             None => std::env::remove_var("SLAFLING_TOKEN"),
@@ -636,10 +632,10 @@ mod tests {
     }
 
     #[test]
-    fn resolve_token_empty_env_is_ignored() {
+    fn resolve_token_from_env_empty_is_error() {
         let prev = std::env::var("SLAFLING_TOKEN").ok();
         std::env::set_var("SLAFLING_TOKEN", "");
-        let result = resolve_token("file", Some("_nonexistent_test_profile_"));
+        let result = resolve_token_from_env();
         match prev {
             Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
             None => std::env::remove_var("SLAFLING_TOKEN"),
@@ -648,21 +644,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("token is not configured"));
-    }
-
-    #[test]
-    fn describe_token_source_env() {
-        let prev = std::env::var("SLAFLING_TOKEN").ok();
-        std::env::set_var("SLAFLING_TOKEN", "xoxb-env-test");
-        let result = describe_token_source("file", None);
-        match prev {
-            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
-            None => std::env::remove_var("SLAFLING_TOKEN"),
-        }
-        let (source, location) = result.unwrap();
-        assert_eq!(source, "env");
-        assert_eq!(location, "SLAFLING_TOKEN");
+            .contains("SLAFLING_TOKEN must be set"));
     }
 
     #[test]
