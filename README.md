@@ -204,13 +204,13 @@ slafling validate
 | Variable | Description | Available in |
 |---|---|---|
 | `SLAFLING_PROFILE` | Profile selection | Normal |
-| `SLAFLING_TOKEN` | Bot token (overrides stored token) | Normal, Headless |
+| `SLAFLING_TOKEN` | Bot token | Headless |
 | `SLAFLING_OUTPUT` | Search output format (`table`, `tsv`, `json`) | Normal, Headless |
 | `SLAFLING_HEADLESS` | Enable headless mode (`1`, `true`, `yes`) | — |
 | `SLAFLING_CHANNEL` | Channel to send to (`#channel` or `C01ABCDEF`) | Headless |
-| `SLAFLING_MAX_FILE_SIZE` | File size limit (`100MB`, `1GB`, etc.) | Headless |
-| `SLAFLING_CONFIRM` | Prompt before sending (`true`, `1`, `yes`) | Headless |
-| `SLAFLING_SEARCH_TYPES` | Channel types for search (comma-separated) | Headless |
+| `SLAFLING_MAX_FILE_SIZE` | File size limit (`100MB`, `1GB`, etc.) | Normal, Headless |
+| `SLAFLING_CONFIRM` | Prompt before sending (`true`, `1`, `yes`) | Normal, Headless |
+| `SLAFLING_SEARCH_TYPES` | Channel types for search (comma-separated) | Normal, Headless |
 
 ### Headless Mode
 

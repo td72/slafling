@@ -40,11 +40,14 @@ Config fields: `channel`, `max_file_size`, `confirm`, `output`, `search_types`, 
 
 Token storage backend (`token_store`): `"keychain"` (default on macOS) or `"file"` (default on other platforms). Set in `[default]` section only.
 
-Token resolution priority (per profile):
-1. `SLAFLING_TOKEN` environment variable (shared across profiles, for CI/CD and temporary overrides)
-2. Backend specified by `token_store` — Keychain or token file
+Token resolution priority (per profile, normal mode):
+1. Backend specified by `token_store` — Keychain or token file
+Note: `SLAFLING_TOKEN` is **only** available in headless mode (safety-first design — prevents accidental token override in normal mode).
 
-Environment variables (normal + headless): `SLAFLING_PROFILE` (profile selection, normal only), `SLAFLING_TOKEN` (token override), `SLAFLING_OUTPUT` (search output format). Headless-only: `SLAFLING_HEADLESS` (enable headless mode), `SLAFLING_CHANNEL` (channel), `SLAFLING_MAX_FILE_SIZE` (file size limit), `SLAFLING_CONFIRM` (confirmation), `SLAFLING_SEARCH_TYPES` (search types).
+Environment variables:
+- Normal + Headless: `SLAFLING_OUTPUT` (search output format), `SLAFLING_MAX_FILE_SIZE` (file size limit), `SLAFLING_CONFIRM` (confirmation), `SLAFLING_SEARCH_TYPES` (search types)
+- Normal only: `SLAFLING_PROFILE` (profile selection)
+- Headless only: `SLAFLING_HEADLESS` (enable headless mode), `SLAFLING_TOKEN` (bot token), `SLAFLING_CHANNEL` (channel)
 
 `--headless` mode: runs without config file, all settings from environment variables. Enabled by `--headless` flag or `SLAFLING_HEADLESS=1`. Requires `SLAFLING_TOKEN` and `SLAFLING_CHANNEL` (for send). `--profile` is ignored with a warning. `init`, `token`, and `validate` subcommands error in headless mode.
 

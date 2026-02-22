@@ -204,13 +204,13 @@ slafling validate
 | 変数 | 説明 | 利用可能なモード |
 |---|---|---|
 | `SLAFLING_PROFILE` | プロファイル選択 | 通常 |
-| `SLAFLING_TOKEN` | Bot トークン (保存済みトークンを上書き) | 通常, Headless |
+| `SLAFLING_TOKEN` | Bot トークン | Headless |
 | `SLAFLING_OUTPUT` | 検索の出力形式 (`table`, `tsv`, `json`) | 通常, Headless |
 | `SLAFLING_HEADLESS` | Headless モード有効化 (`1`, `true`, `yes`) | — |
 | `SLAFLING_CHANNEL` | 送信先チャンネル (`#channel` or `C01ABCDEF`) | Headless |
-| `SLAFLING_MAX_FILE_SIZE` | ファイルサイズ上限 (`100MB`, `1GB` 等) | Headless |
-| `SLAFLING_CONFIRM` | 送信前に確認 (`true`, `1`, `yes`) | Headless |
-| `SLAFLING_SEARCH_TYPES` | 検索するチャンネルタイプ (カンマ区切り) | Headless |
+| `SLAFLING_MAX_FILE_SIZE` | ファイルサイズ上限 (`100MB`, `1GB` 等) | 通常, Headless |
+| `SLAFLING_CONFIRM` | 送信前に確認 (`true`, `1`, `yes`) | 通常, Headless |
+| `SLAFLING_SEARCH_TYPES` | 検索するチャンネルタイプ (カンマ区切り) | 通常, Headless |
 
 ### Headless モード
 
