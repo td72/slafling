@@ -199,6 +199,41 @@ slafling token delete -p work
 slafling validate
 ```
 
+### Headless モード
+
+設定ファイルなしで動作 — すべての設定を環境変数から取得します。CI/CD、Docker、cron、その他の非対話環境で便利です。
+
+`--headless` フラグまたは `SLAFLING_HEADLESS=1` 環境変数で有効化。
+
+| 変数 | 必須? | デフォルト | 形式 |
+|---|---|---|---|
+| `SLAFLING_HEADLESS` | — (フラグの代替) | 未設定 | `1`, `true`, `yes` |
+| `SLAFLING_TOKEN` | Yes | — | `xoxb-...` |
+| `SLAFLING_CHANNEL` | Yes (送信時) | — | `#channel` or `C01ABCDEF` |
+| `SLAFLING_MAX_FILE_SIZE` | No | `100MB` | `100MB`, `1GB` 等 |
+| `SLAFLING_CONFIRM` | No | `false` | `true`, `1`, `yes` |
+| `SLAFLING_OUTPUT` | No | 自動判定 | `table`, `tsv`, `json` |
+| `SLAFLING_SEARCH_TYPES` | No | `public_channel` | カンマ区切り |
+
+```bash
+# メッセージを送信
+SLAFLING_TOKEN=xoxb-... SLAFLING_CHANNEL="#deploy" slafling --headless -t "deploy complete"
+
+# 標準入力から送信
+echo "build log" | SLAFLING_TOKEN=xoxb-... SLAFLING_CHANNEL="#ci" slafling --headless -t
+
+# チャンネル検索
+SLAFLING_TOKEN=xoxb-... slafling --headless search general
+
+# SLAFLING_HEADLESS 環境変数を使用 (--headless フラグ不要)
+export SLAFLING_HEADLESS=1
+export SLAFLING_TOKEN=xoxb-...
+export SLAFLING_CHANNEL="#alerts"
+slafling -t "alert message"
+```
+
+`--profile` は headless モードでは無視されます（警告を表示）。`validate` サブコマンドは headless モードでは使用できません。
+
 ## ライセンス
 
 MIT

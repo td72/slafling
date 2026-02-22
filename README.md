@@ -199,6 +199,41 @@ slafling token delete -p work
 slafling validate
 ```
 
+### Headless Mode
+
+Run without a config file — all settings come from environment variables. Useful for CI/CD, Docker, cron, and other non-interactive environments.
+
+Enable with `--headless` flag or `SLAFLING_HEADLESS=1` environment variable.
+
+| Variable | Required? | Default | Format |
+|---|---|---|---|
+| `SLAFLING_HEADLESS` | — (flag alternative) | unset | `1`, `true`, `yes` |
+| `SLAFLING_TOKEN` | Yes | — | `xoxb-...` |
+| `SLAFLING_CHANNEL` | Yes (send) | — | `#channel` or `C01ABCDEF` |
+| `SLAFLING_MAX_FILE_SIZE` | No | `100MB` | `100MB`, `1GB`, etc. |
+| `SLAFLING_CONFIRM` | No | `false` | `true`, `1`, `yes` |
+| `SLAFLING_OUTPUT` | No | auto-detect | `table`, `tsv`, `json` |
+| `SLAFLING_SEARCH_TYPES` | No | `public_channel` | comma-separated |
+
+```bash
+# Send a message
+SLAFLING_TOKEN=xoxb-... SLAFLING_CHANNEL="#deploy" slafling --headless -t "deploy complete"
+
+# Pipe from stdin
+echo "build log" | SLAFLING_TOKEN=xoxb-... SLAFLING_CHANNEL="#ci" slafling --headless -t
+
+# Search channels
+SLAFLING_TOKEN=xoxb-... slafling --headless search general
+
+# Using SLAFLING_HEADLESS env var (no --headless flag needed)
+export SLAFLING_HEADLESS=1
+export SLAFLING_TOKEN=xoxb-...
+export SLAFLING_CHANNEL="#alerts"
+slafling -t "alert message"
+```
+
+`--profile` is ignored in headless mode (with a warning). `validate` subcommand is not available in headless mode.
+
 ## License
 
 MIT

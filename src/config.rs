@@ -32,6 +32,7 @@ pub struct Profile {
     pub search_types: Option<Vec<String>>,
 }
 
+#[derive(Debug)]
 pub struct ResolvedConfig {
     pub token: String,
     pub channel: String,
@@ -319,6 +320,76 @@ pub fn resolve_output(config: &ConfigFile, profile_name: Option<&str>) -> Option
     output
 }
 
+/// Check if headless mode is enabled via SLAFLING_HEADLESS env var.
+pub fn is_headless_env() -> bool {
+    match std::env::var("SLAFLING_HEADLESS") {
+        Ok(v) => matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"),
+        Err(_) => false,
+    }
+}
+
+/// Resolve all settings from environment variables (headless mode, for send).
+pub fn resolve_from_env() -> Result<ResolvedConfig> {
+    let token = resolve_token_from_env()?;
+
+    let channel = std::env::var("SLAFLING_CHANNEL")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .context("in headless mode, SLAFLING_CHANNEL must be set")?;
+
+    let max_file_size = match std::env::var("SLAFLING_MAX_FILE_SIZE")
+        .ok()
+        .filter(|s| !s.is_empty())
+    {
+        Some(s) => parse_file_size(&s)
+            .with_context(|| format!("in headless mode, invalid SLAFLING_MAX_FILE_SIZE: '{s}'"))?,
+        None => DEFAULT_MAX_FILE_SIZE,
+    };
+
+    let confirm = std::env::var("SLAFLING_CONFIRM")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false);
+
+    Ok(ResolvedConfig {
+        token,
+        channel,
+        max_file_size,
+        confirm,
+    })
+}
+
+/// Resolve token from SLAFLING_TOKEN env var (headless mode).
+pub fn resolve_token_from_env() -> Result<String> {
+    std::env::var("SLAFLING_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .context("in headless mode, SLAFLING_TOKEN must be set")
+}
+
+/// Resolve search_types from SLAFLING_SEARCH_TYPES env var (headless mode).
+pub fn resolve_search_types_from_env() -> Option<String> {
+    std::env::var("SLAFLING_SEARCH_TYPES")
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+/// Validate a comma-separated search_types string.
+pub fn validate_search_types_str(s: &str) -> Result<()> {
+    for val in s.split(',') {
+        let trimmed = val.trim();
+        if !VALID_SEARCH_TYPES.contains(&trimmed) {
+            bail!(
+                "invalid search type '{}' (valid: {})",
+                trimmed,
+                VALID_SEARCH_TYPES.join(", ")
+            );
+        }
+    }
+    Ok(())
+}
+
 pub fn format_size(bytes: u64) -> String {
     if bytes >= GB {
         format!("{:.1}GB", bytes as f64 / GB as f64)
@@ -582,5 +653,148 @@ mod tests {
         let (source, location) = result.unwrap();
         assert_eq!(source, "env");
         assert_eq!(location, "SLAFLING_TOKEN");
+    }
+
+    #[test]
+    fn validate_search_types_str_valid() {
+        assert!(validate_search_types_str("public_channel").is_ok());
+        assert!(validate_search_types_str("public_channel,private_channel").is_ok());
+        assert!(validate_search_types_str("public_channel,private_channel,im,mpim").is_ok());
+    }
+
+    #[test]
+    fn validate_search_types_str_invalid() {
+        let err = validate_search_types_str("public_channel,foo").unwrap_err();
+        assert!(err.to_string().contains("invalid search type 'foo'"));
+    }
+
+    #[test]
+    fn is_headless_env_values() {
+        let prev = std::env::var("SLAFLING_HEADLESS").ok();
+
+        for val in &["1", "true", "yes", "TRUE", "Yes"] {
+            std::env::set_var("SLAFLING_HEADLESS", val);
+            assert!(is_headless_env(), "expected '{val}' to enable headless");
+        }
+
+        for val in &["0", "false", "no", ""] {
+            std::env::set_var("SLAFLING_HEADLESS", val);
+            assert!(
+                !is_headless_env(),
+                "expected '{val}' to not enable headless"
+            );
+        }
+
+        std::env::remove_var("SLAFLING_HEADLESS");
+        assert!(!is_headless_env(), "expected unset to not enable headless");
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_HEADLESS", v),
+            None => std::env::remove_var("SLAFLING_HEADLESS"),
+        }
+    }
+
+    #[test]
+    fn resolve_from_env_success() {
+        let prev_token = std::env::var("SLAFLING_TOKEN").ok();
+        let prev_channel = std::env::var("SLAFLING_CHANNEL").ok();
+        let prev_max = std::env::var("SLAFLING_MAX_FILE_SIZE").ok();
+        let prev_confirm = std::env::var("SLAFLING_CONFIRM").ok();
+
+        std::env::set_var("SLAFLING_TOKEN", "xoxb-headless");
+        std::env::set_var("SLAFLING_CHANNEL", "#test");
+        std::env::set_var("SLAFLING_MAX_FILE_SIZE", "50MB");
+        std::env::set_var("SLAFLING_CONFIRM", "true");
+
+        let result = resolve_from_env();
+
+        // Restore
+        for (key, prev) in [
+            ("SLAFLING_TOKEN", prev_token),
+            ("SLAFLING_CHANNEL", prev_channel),
+            ("SLAFLING_MAX_FILE_SIZE", prev_max),
+            ("SLAFLING_CONFIRM", prev_confirm),
+        ] {
+            match prev {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+
+        let cfg = result.unwrap();
+        assert_eq!(cfg.token, "xoxb-headless");
+        assert_eq!(cfg.channel, "#test");
+        assert_eq!(cfg.max_file_size, 50 * MB);
+        assert!(cfg.confirm);
+    }
+
+    #[test]
+    fn resolve_from_env_missing_channel() {
+        let prev_token = std::env::var("SLAFLING_TOKEN").ok();
+        let prev_channel = std::env::var("SLAFLING_CHANNEL").ok();
+
+        std::env::set_var("SLAFLING_TOKEN", "xoxb-test");
+        std::env::remove_var("SLAFLING_CHANNEL");
+
+        let result = resolve_from_env();
+
+        match prev_token {
+            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
+            None => std::env::remove_var("SLAFLING_TOKEN"),
+        }
+        match prev_channel {
+            Some(v) => std::env::set_var("SLAFLING_CHANNEL", v),
+            None => std::env::remove_var("SLAFLING_CHANNEL"),
+        }
+
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("SLAFLING_CHANNEL must be set"));
+    }
+
+    #[test]
+    fn resolve_from_env_missing_token() {
+        let prev = std::env::var("SLAFLING_TOKEN").ok();
+        std::env::remove_var("SLAFLING_TOKEN");
+
+        let result = resolve_from_env();
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
+            None => std::env::remove_var("SLAFLING_TOKEN"),
+        }
+
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("SLAFLING_TOKEN must be set"));
+    }
+
+    #[test]
+    fn resolve_from_env_defaults() {
+        let prev_token = std::env::var("SLAFLING_TOKEN").ok();
+        let prev_channel = std::env::var("SLAFLING_CHANNEL").ok();
+        let prev_max = std::env::var("SLAFLING_MAX_FILE_SIZE").ok();
+        let prev_confirm = std::env::var("SLAFLING_CONFIRM").ok();
+
+        std::env::set_var("SLAFLING_TOKEN", "xoxb-test");
+        std::env::set_var("SLAFLING_CHANNEL", "#general");
+        std::env::remove_var("SLAFLING_MAX_FILE_SIZE");
+        std::env::remove_var("SLAFLING_CONFIRM");
+
+        let result = resolve_from_env();
+
+        for (key, prev) in [
+            ("SLAFLING_TOKEN", prev_token),
+            ("SLAFLING_CHANNEL", prev_channel),
+            ("SLAFLING_MAX_FILE_SIZE", prev_max),
+            ("SLAFLING_CONFIRM", prev_confirm),
+        ] {
+            match prev {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+
+        let cfg = result.unwrap();
+        assert_eq!(cfg.max_file_size, DEFAULT_MAX_FILE_SIZE);
+        assert!(!cfg.confirm);
     }
 }
