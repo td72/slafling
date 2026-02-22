@@ -199,21 +199,24 @@ slafling token delete -p work
 slafling validate
 ```
 
+### Environment Variables
+
+| Variable | Description | Available in |
+|---|---|---|
+| `SLAFLING_PROFILE` | Profile selection | Normal |
+| `SLAFLING_TOKEN` | Bot token (overrides stored token) | Normal, Headless |
+| `SLAFLING_OUTPUT` | Search output format (`table`, `tsv`, `json`) | Normal, Headless |
+| `SLAFLING_HEADLESS` | Enable headless mode (`1`, `true`, `yes`) | — |
+| `SLAFLING_CHANNEL` | Channel to send to (`#channel` or `C01ABCDEF`) | Headless |
+| `SLAFLING_MAX_FILE_SIZE` | File size limit (`100MB`, `1GB`, etc.) | Headless |
+| `SLAFLING_CONFIRM` | Prompt before sending (`true`, `1`, `yes`) | Headless |
+| `SLAFLING_SEARCH_TYPES` | Channel types for search (comma-separated) | Headless |
+
 ### Headless Mode
 
-Run without a config file — all settings come from environment variables. Useful for CI/CD, Docker, cron, and other non-interactive environments.
+Run without a config file — all settings come from environment variables (see above). Useful for CI/CD, Docker, cron, and other non-interactive environments.
 
-Enable with `--headless` flag or `SLAFLING_HEADLESS=1` environment variable.
-
-| Variable | Required? | Default | Format |
-|---|---|---|---|
-| `SLAFLING_HEADLESS` | — (flag alternative) | unset | `1`, `true`, `yes` |
-| `SLAFLING_TOKEN` | Yes | — | `xoxb-...` |
-| `SLAFLING_CHANNEL` | Yes (send) | — | `#channel` or `C01ABCDEF` |
-| `SLAFLING_MAX_FILE_SIZE` | No | `100MB` | `100MB`, `1GB`, etc. |
-| `SLAFLING_CONFIRM` | No | `false` | `true`, `1`, `yes` |
-| `SLAFLING_OUTPUT` | No | auto-detect | `table`, `tsv`, `json` |
-| `SLAFLING_SEARCH_TYPES` | No | `public_channel` | comma-separated |
+Enable with `--headless` flag or `SLAFLING_HEADLESS=1`. Requires `SLAFLING_TOKEN` and `SLAFLING_CHANNEL` (for send).
 
 ```bash
 # Send a message

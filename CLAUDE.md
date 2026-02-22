@@ -44,7 +44,7 @@ Token resolution priority (per profile):
 1. `SLAFLING_TOKEN` environment variable (shared across profiles, for CI/CD and temporary overrides)
 2. Backend specified by `token_store` — Keychain or token file
 
-Environment variables: `SLAFLING_PROFILE` (profile selection), `SLAFLING_OUTPUT` (search output format), `SLAFLING_TOKEN` (token override), `SLAFLING_HEADLESS` (enable headless mode), `SLAFLING_CHANNEL` (headless channel), `SLAFLING_MAX_FILE_SIZE` (headless file size limit), `SLAFLING_CONFIRM` (headless confirmation), `SLAFLING_SEARCH_TYPES` (headless search types).
+Environment variables (normal + headless): `SLAFLING_PROFILE` (profile selection, normal only), `SLAFLING_TOKEN` (token override), `SLAFLING_OUTPUT` (search output format). Headless-only: `SLAFLING_HEADLESS` (enable headless mode), `SLAFLING_CHANNEL` (channel), `SLAFLING_MAX_FILE_SIZE` (file size limit), `SLAFLING_CONFIRM` (confirmation), `SLAFLING_SEARCH_TYPES` (search types).
 
 `--headless` mode: runs without config file, all settings from environment variables. Enabled by `--headless` flag or `SLAFLING_HEADLESS=1`. Requires `SLAFLING_TOKEN` and `SLAFLING_CHANNEL` (for send). `--profile` is ignored with a warning. `init`, `token`, and `validate` subcommands error in headless mode.
 
