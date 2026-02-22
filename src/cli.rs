@@ -113,3 +113,42 @@ pub enum OutputFormat {
     Tsv,
     Json,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_types_to_api_string_single() {
+        assert_eq!(
+            search_types_to_api_string(&[SearchType::PublicChannel]),
+            "public_channel"
+        );
+    }
+
+    #[test]
+    fn search_types_to_api_string_multiple() {
+        assert_eq!(
+            search_types_to_api_string(&[
+                SearchType::PublicChannel,
+                SearchType::PrivateChannel,
+                SearchType::Im,
+                SearchType::Mpim,
+            ]),
+            "public_channel,private_channel,im,mpim"
+        );
+    }
+
+    #[test]
+    fn search_types_to_api_string_empty() {
+        assert_eq!(search_types_to_api_string(&[]), "");
+    }
+
+    #[test]
+    fn search_types_to_api_string_order_preserved() {
+        assert_eq!(
+            search_types_to_api_string(&[SearchType::Mpim, SearchType::Im]),
+            "mpim,im"
+        );
+    }
+}

@@ -381,6 +381,19 @@ pub fn resolve_search_types_from_env() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// Validate an output format string (from env var).
+pub fn validate_output_str(s: &str) -> Result<()> {
+    let lower = s.to_lowercase();
+    if !VALID_OUTPUT_VALUES.contains(&lower.as_str()) {
+        bail!(
+            "invalid output '{}' (valid: {})",
+            s,
+            VALID_OUTPUT_VALUES.join(", ")
+        );
+    }
+    Ok(())
+}
+
 /// Validate a comma-separated search_types string.
 pub fn validate_search_types_str(s: &str) -> Result<()> {
     for val in s.split(',') {
@@ -650,6 +663,22 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("SLAFLING_TOKEN must be set"));
+    }
+
+    #[test]
+    fn validate_output_str_valid() {
+        assert!(validate_output_str("table").is_ok());
+        assert!(validate_output_str("tsv").is_ok());
+        assert!(validate_output_str("json").is_ok());
+        assert!(validate_output_str("JSON").is_ok());
+        assert!(validate_output_str("Table").is_ok());
+    }
+
+    #[test]
+    fn validate_output_str_invalid() {
+        let err = validate_output_str("yaml").unwrap_err();
+        assert!(err.to_string().contains("invalid output 'yaml'"));
+        assert!(err.to_string().contains("table, tsv, json"));
     }
 
     #[test]

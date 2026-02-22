@@ -127,7 +127,13 @@ fn run_headless(command: Option<cli::Command>, send: cli::SendArgs) -> Result<()
                     s
                 }
             };
-            let format = resolve_output_format(output, std::env::var("SLAFLING_OUTPUT").ok());
+            let env_output = std::env::var("SLAFLING_OUTPUT")
+                .ok()
+                .filter(|s| !s.is_empty());
+            if let Some(ref s) = env_output {
+                config::validate_output_str(s)?;
+            }
+            let format = resolve_output_format(output, env_output);
             run_search_with_token(&token, &query, format, &types_str)
         }
         None => {
@@ -253,7 +259,11 @@ fn run_search(
 ) -> Result<()> {
     let token_store = config::resolve_token_store(cfg);
     let token = config::resolve_token(&token_store, profile)?;
-    let format = resolve_output_format(cli_output, config::resolve_output(cfg, profile));
+    let fallback_output = config::resolve_output(cfg, profile);
+    if let Some(ref s) = fallback_output {
+        config::validate_output_str(s)?;
+    }
+    let format = resolve_output_format(cli_output, fallback_output);
 
     run_search_with_token(&token, query, format, types)
 }
@@ -497,4 +507,50 @@ fn run_send_with_resolved(send: cli::SendArgs, resolved: &config::ResolvedConfig
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_output_format_cli_flag_wins() {
+        let result =
+            resolve_output_format(Some(cli::OutputFormat::Json), Some("table".to_string()));
+        assert!(matches!(result, cli::OutputFormat::Json));
+    }
+
+    #[test]
+    fn resolve_output_format_fallback_table() {
+        let result = resolve_output_format(None, Some("table".to_string()));
+        assert!(matches!(result, cli::OutputFormat::Table));
+    }
+
+    #[test]
+    fn resolve_output_format_fallback_tsv() {
+        let result = resolve_output_format(None, Some("tsv".to_string()));
+        assert!(matches!(result, cli::OutputFormat::Tsv));
+    }
+
+    #[test]
+    fn resolve_output_format_fallback_json() {
+        let result = resolve_output_format(None, Some("json".to_string()));
+        assert!(matches!(result, cli::OutputFormat::Json));
+    }
+
+    #[test]
+    fn resolve_output_format_fallback_case_insensitive() {
+        let result = resolve_output_format(None, Some("JSON".to_string()));
+        assert!(matches!(result, cli::OutputFormat::Json));
+        let result = resolve_output_format(None, Some("Table".to_string()));
+        assert!(matches!(result, cli::OutputFormat::Table));
+    }
+
+    #[test]
+    fn resolve_output_format_no_fallback_is_auto() {
+        // Without a fallback, returns auto-detect result (Table or Tsv depending on TTY).
+        // In test environment stdout is not a TTY, so should be Tsv.
+        let result = resolve_output_format(None, None);
+        assert!(matches!(result, cli::OutputFormat::Tsv));
+    }
 }
