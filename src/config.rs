@@ -611,7 +611,14 @@ mod tests {
 
     #[test]
     fn resolve_token_invalid_store() {
-        let err = resolve_token("redis", None).unwrap_err();
+        let prev = std::env::var("SLAFLING_TOKEN").ok();
+        std::env::remove_var("SLAFLING_TOKEN");
+        let result = resolve_token("redis", None);
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_TOKEN", v),
+            None => std::env::remove_var("SLAFLING_TOKEN"),
+        }
+        let err = result.unwrap_err();
         assert!(err.to_string().contains("invalid token_store 'redis'"));
     }
 
