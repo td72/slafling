@@ -232,7 +232,7 @@ export SLAFLING_CHANNEL="#alerts"
 slafling -t "alert message"
 ```
 
-`--profile` is ignored in headless mode (with a warning). `validate` subcommand is not available in headless mode.
+`--profile` is ignored in headless mode (with a warning). `init`, `token`, and `validate` subcommands are not available in headless mode.
 
 ## License
 

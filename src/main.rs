@@ -12,10 +12,21 @@ use clap::Parser;
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
+    // Headless mode: all settings from environment variables
+    let headless = cli.headless || config::is_headless_env();
+
     // Handle init and token before loading config (config may not exist yet)
     match &cli.command {
-        Some(cli::Command::Init) => return run_init(),
+        Some(cli::Command::Init) => {
+            if headless {
+                bail!("init is not available in headless mode");
+            }
+            return run_init();
+        }
         Some(cli::Command::Token { action }) => {
+            if headless {
+                bail!("token is not available in headless mode");
+            }
             let profile = cli
                 .profile
                 .or_else(|| std::env::var("SLAFLING_PROFILE").ok());
@@ -24,8 +35,6 @@ fn main() -> Result<()> {
         _ => {}
     }
 
-    // Headless mode: all settings from environment variables
-    let headless = cli.headless || config::is_headless_env();
     if headless {
         if cli.profile.is_some() || std::env::var("SLAFLING_PROFILE").ok().is_some() {
             eprintln!("warning: --profile is ignored in headless mode");

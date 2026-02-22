@@ -46,7 +46,7 @@ Token resolution priority (per profile):
 
 Environment variables: `SLAFLING_PROFILE` (profile selection), `SLAFLING_OUTPUT` (search output format), `SLAFLING_TOKEN` (token override), `SLAFLING_HEADLESS` (enable headless mode), `SLAFLING_CHANNEL` (headless channel), `SLAFLING_MAX_FILE_SIZE` (headless file size limit), `SLAFLING_CONFIRM` (headless confirmation), `SLAFLING_SEARCH_TYPES` (headless search types).
 
-`--headless` mode: runs without config file, all settings from environment variables. Enabled by `--headless` flag or `SLAFLING_HEADLESS=1`. Requires `SLAFLING_TOKEN` and `SLAFLING_CHANNEL` (for send). `--profile` is ignored with a warning. `validate` subcommand errors in headless mode.
+`--headless` mode: runs without config file, all settings from environment variables. Enabled by `--headless` flag or `SLAFLING_HEADLESS=1`. Requires `SLAFLING_TOKEN` and `SLAFLING_CHANNEL` (for send). `--profile` is ignored with a warning. `init`, `token`, and `validate` subcommands error in headless mode.
 
 stdin is read when no message argument is given; errors if stdin is a TTY.
 

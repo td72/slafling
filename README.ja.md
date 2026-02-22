@@ -232,7 +232,7 @@ export SLAFLING_CHANNEL="#alerts"
 slafling -t "alert message"
 ```
 
-`--profile` は headless モードでは無視されます（警告を表示）。`validate` サブコマンドは headless モードでは使用できません。
+`--profile` は headless モードでは無視されます（警告を表示）。`init`、`token`、`validate` サブコマンドは headless モードでは使用できません。
 
 ## ライセンス
 
