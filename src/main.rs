@@ -76,38 +76,24 @@ fn run_init() -> Result<()> {
     let path = config::config_path()?;
 
     if path.exists() {
-        let stdin = std::io::stdin();
-        if !stdin.is_terminal() {
+        if !std::io::stdin().is_terminal() {
             bail!(
                 "{} already exists (run interactively to confirm overwrite)",
                 path.display()
             );
         }
-        eprint!("{} already exists. Overwrite? [y/N] ", path.display());
-        std::io::stderr().flush()?;
-        let mut input = String::new();
-        stdin.lock().read_line(&mut input)?;
-        if !matches!(input.trim(), "y" | "Y") {
+        if !confirm_yes_no(&format!(
+            "{} already exists. Overwrite? [y/N] ",
+            path.display()
+        ))? {
             bail!("aborted");
         }
     }
 
-    let stdin = std::io::stdin();
-    if !stdin.is_terminal() {
-        bail!("init requires interactive input (stdin must be a TTY)");
-    }
-
-    eprint!("Bot Token (xoxb-...): ");
-    std::io::stderr().flush()?;
-    let mut token_input = String::new();
-    stdin.lock().read_line(&mut token_input)?;
-    let token_value = token_input.trim();
-    if token_value.is_empty() {
-        bail!("token is required");
-    }
+    let token_value = prompt_token()?;
 
     // Store token using platform default (config doesn't exist yet)
-    store_token(config::default_token_store(), None, token_value)?;
+    store_token(config::default_token_store(), None, &token_value)?;
 
     // Write config without token
     config::write_init_config(&path)?;
@@ -147,6 +133,30 @@ fn run_headless(command: Option<cli::Command>, send: cli::SendArgs) -> Result<()
     }
 }
 
+fn confirm_yes_no(prompt: &str) -> Result<bool> {
+    eprint!("{prompt}");
+    std::io::stderr().flush()?;
+    let mut input = String::new();
+    std::io::stdin().lock().read_line(&mut input)?;
+    Ok(matches!(input.trim(), "y" | "Y"))
+}
+
+fn prompt_token() -> Result<String> {
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        bail!("token input requires interactive input (stdin must be a TTY)");
+    }
+    eprint!("Bot Token (xoxb-...): ");
+    std::io::stderr().flush()?;
+    let mut buf = String::new();
+    stdin.lock().read_line(&mut buf)?;
+    let value = buf.trim().to_string();
+    if value.is_empty() {
+        bail!("token is required");
+    }
+    Ok(value)
+}
+
 fn store_token(token_store: &str, profile: Option<&str>, token_value: &str) -> Result<()> {
     match token_store {
         "keychain" => {
@@ -183,22 +193,9 @@ fn run_token(action: &cli::TokenAction, profile: Option<&str>) -> Result<()> {
 }
 
 fn run_token_set(profile: Option<&str>) -> Result<()> {
-    let stdin = std::io::stdin();
-    if !stdin.is_terminal() {
-        bail!("token set requires interactive input (stdin must be a TTY)");
-    }
-
-    eprint!("Bot Token (xoxb-...): ");
-    std::io::stderr().flush()?;
-    let mut token_input = String::new();
-    stdin.lock().read_line(&mut token_input)?;
-    let token_value = token_input.trim();
-    if token_value.is_empty() {
-        bail!("token is required");
-    }
-
+    let token_value = prompt_token()?;
     let token_store = load_token_store()?;
-    store_token(&token_store, profile, token_value)?;
+    store_token(&token_store, profile, &token_value)?;
     Ok(())
 }
 
@@ -457,17 +454,14 @@ fn run_send_with_resolved(send: cli::SendArgs, resolved: &config::ResolvedConfig
             format!("> {message}")
         };
 
-        let stdin = std::io::stdin();
-        if !stdin.is_terminal() {
+        if !std::io::stdin().is_terminal() {
             bail!("confirm is enabled but stdin is not a TTY (pass -y to skip confirmation)");
         }
 
-        eprint!("Send to {}:\n{summary}\nSend? [y/N] ", resolved.channel);
-        std::io::stderr().flush()?;
-
-        let mut input = String::new();
-        std::io::stdin().lock().read_line(&mut input)?;
-        if !matches!(input.trim(), "y" | "Y") {
+        if !confirm_yes_no(&format!(
+            "Send to {}:\n{summary}\nSend? [y/N] ",
+            resolved.channel
+        ))? {
             bail!("aborted");
         }
     }

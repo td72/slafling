@@ -320,12 +320,15 @@ pub fn resolve_output(config: &ConfigFile, profile_name: Option<&str>) -> Option
     output
 }
 
+fn is_truthy(s: &str) -> bool {
+    matches!(s.to_lowercase().as_str(), "1" | "true" | "yes")
+}
+
 /// Check if headless mode is enabled via SLAFLING_HEADLESS env var.
 pub fn is_headless_env() -> bool {
-    match std::env::var("SLAFLING_HEADLESS") {
-        Ok(v) => matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"),
-        Err(_) => false,
-    }
+    std::env::var("SLAFLING_HEADLESS")
+        .map(|v| is_truthy(&v))
+        .unwrap_or(false)
 }
 
 /// Resolve all settings from environment variables (headless mode, for send).
@@ -349,7 +352,7 @@ pub fn resolve_from_env() -> Result<ResolvedConfig> {
     let confirm = std::env::var("SLAFLING_CONFIRM")
         .ok()
         .filter(|s| !s.is_empty())
-        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+        .map(|v| is_truthy(&v))
         .unwrap_or(false);
 
     Ok(ResolvedConfig {
