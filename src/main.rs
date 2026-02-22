@@ -137,34 +137,13 @@ fn run_headless(command: Option<cli::Command>, send: cli::SendArgs) -> Result<()
                     s
                 }
             };
-            let format = resolve_output_format_headless(output);
+            let format = resolve_output_format(output, std::env::var("SLAFLING_OUTPUT").ok());
             run_search_with_token(&token, &query, format, &types_str)
         }
         None => {
             let resolved = config::resolve_from_env()?;
             run_send_with_resolved(send, &resolved)
         }
-    }
-}
-
-fn resolve_output_format_headless(cli_output: Option<cli::OutputFormat>) -> cli::OutputFormat {
-    if let Some(f) = cli_output {
-        return f;
-    }
-
-    if let Ok(s) = std::env::var("SLAFLING_OUTPUT") {
-        match s.to_lowercase().as_str() {
-            "table" => return cli::OutputFormat::Table,
-            "tsv" => return cli::OutputFormat::Tsv,
-            "json" => return cli::OutputFormat::Json,
-            _ => {}
-        }
-    }
-
-    if std::io::stdout().is_terminal() {
-        cli::OutputFormat::Table
-    } else {
-        cli::OutputFormat::Tsv
     }
 }
 
@@ -273,7 +252,7 @@ fn run_search(
 ) -> Result<()> {
     let token_store = config::resolve_token_store(cfg);
     let token = config::resolve_token(&token_store, profile)?;
-    let format = resolve_output_format(cli_output, cfg, profile);
+    let format = resolve_output_format(cli_output, config::resolve_output(cfg, profile));
 
     run_search_with_token(&token, query, format, types)
 }
@@ -302,16 +281,15 @@ fn run_search_with_token(
 
 fn resolve_output_format(
     cli_output: Option<cli::OutputFormat>,
-    cfg: &config::ConfigFile,
-    profile: Option<&str>,
+    config_output: Option<String>,
 ) -> cli::OutputFormat {
     // 1. CLI flag
     if let Some(f) = cli_output {
         return f;
     }
 
-    // 2. env var / 3. config
-    if let Some(s) = config::resolve_output(cfg, profile) {
+    // 2. env var / config value
+    if let Some(s) = config_output {
         match s.to_lowercase().as_str() {
             "table" => return cli::OutputFormat::Table,
             "tsv" => return cli::OutputFormat::Tsv,
@@ -320,7 +298,7 @@ fn resolve_output_format(
         }
     }
 
-    // 4. auto-detect
+    // 3. auto-detect
     if std::io::stdout().is_terminal() {
         cli::OutputFormat::Table
     } else {
