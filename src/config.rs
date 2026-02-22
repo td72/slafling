@@ -411,6 +411,7 @@ pub fn format_size(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     fn minimal_config() -> ConfigFile {
         ConfigFile {
@@ -622,6 +623,7 @@ mod tests {
     // resolve_token() and describe_token_source() no longer check SLAFLING_TOKEN.
 
     #[test]
+    #[serial]
     fn resolve_token_from_env_success() {
         let prev = std::env::var("SLAFLING_TOKEN").ok();
         std::env::set_var("SLAFLING_TOKEN", "xoxb-env-test");
@@ -634,6 +636,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_token_from_env_empty_is_error() {
         let prev = std::env::var("SLAFLING_TOKEN").ok();
         std::env::set_var("SLAFLING_TOKEN", "");
@@ -663,6 +666,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn is_headless_env_values() {
         let prev = std::env::var("SLAFLING_HEADLESS").ok();
 
@@ -689,6 +693,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_from_env_success() {
         let prev_token = std::env::var("SLAFLING_TOKEN").ok();
         let prev_channel = std::env::var("SLAFLING_CHANNEL").ok();
@@ -723,6 +728,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_from_env_missing_channel() {
         let prev_token = std::env::var("SLAFLING_TOKEN").ok();
         let prev_channel = std::env::var("SLAFLING_CHANNEL").ok();
@@ -746,6 +752,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_from_env_missing_token() {
         let prev = std::env::var("SLAFLING_TOKEN").ok();
         std::env::remove_var("SLAFLING_TOKEN");
@@ -762,6 +769,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_from_env_defaults() {
         let prev_token = std::env::var("SLAFLING_TOKEN").ok();
         let prev_channel = std::env::var("SLAFLING_CHANNEL").ok();
@@ -916,6 +924,7 @@ mod tests {
     // --- resolve_search_types tests ---
 
     #[test]
+    #[serial]
     fn resolve_search_types_from_default() {
         let mut cfg = minimal_config();
         cfg.default.search_types = Some(vec!["public_channel".to_string(), "im".to_string()]);
@@ -932,6 +941,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_search_types_profile_overrides_default() {
         let mut cfg = minimal_config();
         cfg.default.search_types = Some(vec!["public_channel".to_string()]);
@@ -958,6 +968,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_search_types_env_var_overrides() {
         let cfg = minimal_config();
         let prev = std::env::var("SLAFLING_SEARCH_TYPES").ok();
@@ -973,6 +984,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_search_types_env_var_empty_falls_back() {
         let mut cfg = minimal_config();
         cfg.default.search_types = Some(vec!["public_channel".to_string()]);
@@ -989,6 +1001,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_search_types_none_when_unset() {
         let cfg = minimal_config();
         let prev = std::env::var("SLAFLING_SEARCH_TYPES").ok();
@@ -1006,6 +1019,7 @@ mod tests {
     // --- resolve_output tests ---
 
     #[test]
+    #[serial]
     fn resolve_output_env_var() {
         let cfg = minimal_config();
         let prev = std::env::var("SLAFLING_OUTPUT").ok();
@@ -1021,6 +1035,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_output_env_var_empty_falls_back() {
         let mut cfg = minimal_config();
         cfg.default.output = Some("tsv".to_string());
@@ -1037,6 +1052,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_output_from_default() {
         let mut cfg = minimal_config();
         cfg.default.output = Some("table".to_string());
@@ -1053,6 +1069,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_output_profile_overrides_default() {
         let mut cfg = minimal_config();
         cfg.default.output = Some("table".to_string());
@@ -1079,6 +1096,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_output_none_when_unset() {
         let cfg = minimal_config();
         let prev = std::env::var("SLAFLING_OUTPUT").ok();
