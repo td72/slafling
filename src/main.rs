@@ -11,11 +11,11 @@ use clap::Parser;
 
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
+    let env = config::Env::load();
 
-    // Headless mode: all settings from environment variables
-    let headless = cli.headless || config::is_headless_env();
+    let headless = cli.headless || env.headless;
 
-    // Handle init and token before loading config (config may not exist yet)
+    // Handle commands that don't need a fully resolved Config
     match &cli.command {
         Some(cli::Command::Init) => {
             if headless {
@@ -27,52 +27,40 @@ fn main() -> Result<()> {
             if headless {
                 bail!("token is not available in headless mode");
             }
-            let profile = cli
-                .profile
-                .or_else(|| std::env::var("SLAFLING_PROFILE").ok());
-            return run_token(action, profile.as_deref());
+            let profile = cli.profile.as_deref().or(env.profile.as_deref());
+            return run_token(action, profile);
+        }
+        Some(cli::Command::Validate) => {
+            if headless {
+                bail!("validate has no effect in headless mode");
+            }
+            let path = config::config_path()?;
+            config::load_config()?;
+            println!("{}: ok", path.display());
+            return Ok(());
         }
         _ => {}
     }
 
-    if headless {
-        if cli.profile.is_some() || std::env::var("SLAFLING_PROFILE").ok().is_some() {
+    let config = if headless {
+        if cli.profile.is_some() || env.profile.is_some() {
             eprintln!("warning: --profile is ignored in headless mode");
         }
-        return run_headless(cli.command, cli.send);
-    }
-
-    let cfg = config::load_config()?;
-
-    let profile = cli
-        .profile
-        .or_else(|| std::env::var("SLAFLING_PROFILE").ok());
+        config::Config::new(None, None, &env)?
+    } else {
+        let file = config::load_config()?;
+        let profile = cli.profile.as_deref().or(env.profile.as_deref());
+        config::Config::new(Some(&file), profile, &env)?
+    };
 
     match cli.command {
-        Some(cli::Command::Init) => unreachable!(),
-        Some(cli::Command::Token { .. }) => unreachable!(),
-        Some(cli::Command::Validate) => {
-            let path = config::config_path()?;
-            println!("{}: ok", path.display());
-            Ok(())
-        }
         Some(cli::Command::Search {
             query,
             output,
             types,
-        }) => {
-            let types_str = match types {
-                Some(t) => cli::search_types_to_api_string(&t),
-                None => {
-                    let s = config::resolve_search_types(&cfg, profile.as_deref())
-                        .unwrap_or_else(|| "public_channel".to_string());
-                    config::validate_search_types_str(&s)?;
-                    s
-                }
-            };
-            run_search(profile.as_deref(), &query, output, &types_str, &cfg)
-        }
-        None => run_send(profile.as_deref(), cli.send, &cfg),
+        }) => run_search(&config, &query, output, types),
+        None => run_send(&config, cli.send),
+        _ => unreachable!(),
     }
 }
 
@@ -104,43 +92,6 @@ fn run_init() -> Result<()> {
 
     println!("created {}", path.display());
     Ok(())
-}
-
-fn run_headless(command: Option<cli::Command>, send: cli::SendArgs) -> Result<()> {
-    match command {
-        Some(cli::Command::Init) | Some(cli::Command::Token { .. }) => unreachable!(),
-        Some(cli::Command::Validate) => {
-            bail!("validate has no effect in headless mode");
-        }
-        Some(cli::Command::Search {
-            query,
-            output,
-            types,
-        }) => {
-            let token = config::resolve_token_from_env()?;
-            let types_str = match types {
-                Some(t) => cli::search_types_to_api_string(&t),
-                None => {
-                    let s = config::resolve_search_types_from_env()
-                        .unwrap_or_else(|| "public_channel".to_string());
-                    config::validate_search_types_str(&s)?;
-                    s
-                }
-            };
-            let env_output = std::env::var("SLAFLING_OUTPUT")
-                .ok()
-                .filter(|s| !s.is_empty());
-            if let Some(ref s) = env_output {
-                config::validate_output_str(s)?;
-            }
-            let format = resolve_output_format(output, env_output);
-            run_search_with_token(&token, &query, format, &types_str)
-        }
-        None => {
-            let resolved = config::resolve_from_env()?;
-            run_send_with_resolved(send, &resolved)
-        }
-    }
 }
 
 fn confirm_yes_no(prompt: &str) -> Result<bool> {
@@ -251,21 +202,30 @@ fn run_token_show(profile: Option<&str>) -> Result<()> {
 }
 
 fn run_search(
-    profile: Option<&str>,
+    config: &config::Config,
     query: &str,
     cli_output: Option<cli::OutputFormat>,
-    types: &str,
-    cfg: &config::ConfigFile,
+    types: Option<Vec<cli::SearchType>>,
 ) -> Result<()> {
-    let token_store = config::resolve_token_store(cfg);
-    let token = config::resolve_token(&token_store, profile)?;
-    let fallback_output = config::resolve_output(cfg, profile);
+    let token = config.resolve_token()?;
+    let types_str = match types {
+        Some(t) => cli::search_types_to_api_string(&t),
+        None => {
+            let s = config
+                .search_types
+                .clone()
+                .unwrap_or_else(|| "public_channel".to_string());
+            config::validate_search_types_str(&s)?;
+            s
+        }
+    };
+    let fallback_output = config.output.clone();
     if let Some(ref s) = fallback_output {
         config::validate_output_str(s)?;
     }
     let format = resolve_output_format(cli_output, fallback_output);
 
-    run_search_with_token(&token, query, format, types)
+    run_search_with_token(&token, query, format, &types_str)
 }
 
 fn run_search_with_token(
@@ -385,8 +345,8 @@ fn print_json(channels: &[slack::ChannelInfo]) -> Result<()> {
     Ok(())
 }
 
-fn run_send(profile: Option<&str>, send: cli::SendArgs, cfg: &config::ConfigFile) -> Result<()> {
-    let resolved = config::resolve(cfg, profile)?;
+fn run_send(config: &config::Config, send: cli::SendArgs) -> Result<()> {
+    let resolved = config.resolve_send()?;
     run_send_with_resolved(send, &resolved)
 }
 
