@@ -76,38 +76,24 @@ fn run_init() -> Result<()> {
     let path = config::config_path()?;
 
     if path.exists() {
-        let stdin = std::io::stdin();
-        if !stdin.is_terminal() {
+        if !std::io::stdin().is_terminal() {
             bail!(
                 "{} already exists (run interactively to confirm overwrite)",
                 path.display()
             );
         }
-        eprint!("{} already exists. Overwrite? [y/N] ", path.display());
-        std::io::stderr().flush()?;
-        let mut input = String::new();
-        stdin.lock().read_line(&mut input)?;
-        if !matches!(input.trim(), "y" | "Y") {
+        if !confirm_yes_no(&format!(
+            "{} already exists. Overwrite? [y/N] ",
+            path.display()
+        ))? {
             bail!("aborted");
         }
     }
 
-    let stdin = std::io::stdin();
-    if !stdin.is_terminal() {
-        bail!("init requires interactive input (stdin must be a TTY)");
-    }
-
-    eprint!("Bot Token (xoxb-...): ");
-    std::io::stderr().flush()?;
-    let mut token_input = String::new();
-    stdin.lock().read_line(&mut token_input)?;
-    let token_value = token_input.trim();
-    if token_value.is_empty() {
-        bail!("token is required");
-    }
+    let token_value = prompt_token("init")?;
 
     // Store token using platform default (config doesn't exist yet)
-    store_token(config::default_token_store(), None, token_value)?;
+    store_token(config::default_token_store(), None, &token_value)?;
 
     // Write config without token
     config::write_init_config(&path)?;
@@ -137,7 +123,7 @@ fn run_headless(command: Option<cli::Command>, send: cli::SendArgs) -> Result<()
                     s
                 }
             };
-            let format = resolve_output_format_headless(output);
+            let format = resolve_output_format(output, std::env::var("SLAFLING_OUTPUT").ok());
             run_search_with_token(&token, &query, format, &types_str)
         }
         None => {
@@ -147,25 +133,28 @@ fn run_headless(command: Option<cli::Command>, send: cli::SendArgs) -> Result<()
     }
 }
 
-fn resolve_output_format_headless(cli_output: Option<cli::OutputFormat>) -> cli::OutputFormat {
-    if let Some(f) = cli_output {
-        return f;
-    }
+fn confirm_yes_no(prompt: &str) -> Result<bool> {
+    eprint!("{prompt}");
+    std::io::stderr().flush()?;
+    let mut input = String::new();
+    std::io::stdin().lock().read_line(&mut input)?;
+    Ok(matches!(input.trim(), "y" | "Y"))
+}
 
-    if let Ok(s) = std::env::var("SLAFLING_OUTPUT") {
-        match s.to_lowercase().as_str() {
-            "table" => return cli::OutputFormat::Table,
-            "tsv" => return cli::OutputFormat::Tsv,
-            "json" => return cli::OutputFormat::Json,
-            _ => {}
-        }
+fn prompt_token(command: &str) -> Result<String> {
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        bail!("{command} requires interactive input (stdin must be a TTY)");
     }
-
-    if std::io::stdout().is_terminal() {
-        cli::OutputFormat::Table
-    } else {
-        cli::OutputFormat::Tsv
+    eprint!("Bot Token (xoxb-...): ");
+    std::io::stderr().flush()?;
+    let mut buf = String::new();
+    stdin.lock().read_line(&mut buf)?;
+    let value = buf.trim().to_string();
+    if value.is_empty() {
+        bail!("token is required");
     }
+    Ok(value)
 }
 
 fn store_token(token_store: &str, profile: Option<&str>, token_value: &str) -> Result<()> {
@@ -204,22 +193,9 @@ fn run_token(action: &cli::TokenAction, profile: Option<&str>) -> Result<()> {
 }
 
 fn run_token_set(profile: Option<&str>) -> Result<()> {
-    let stdin = std::io::stdin();
-    if !stdin.is_terminal() {
-        bail!("token set requires interactive input (stdin must be a TTY)");
-    }
-
-    eprint!("Bot Token (xoxb-...): ");
-    std::io::stderr().flush()?;
-    let mut token_input = String::new();
-    stdin.lock().read_line(&mut token_input)?;
-    let token_value = token_input.trim();
-    if token_value.is_empty() {
-        bail!("token is required");
-    }
-
+    let token_value = prompt_token("token set")?;
     let token_store = load_token_store()?;
-    store_token(&token_store, profile, token_value)?;
+    store_token(&token_store, profile, &token_value)?;
     Ok(())
 }
 
@@ -273,7 +249,7 @@ fn run_search(
 ) -> Result<()> {
     let token_store = config::resolve_token_store(cfg);
     let token = config::resolve_token(&token_store, profile)?;
-    let format = resolve_output_format(cli_output, cfg, profile);
+    let format = resolve_output_format(cli_output, config::resolve_output(cfg, profile));
 
     run_search_with_token(&token, query, format, types)
 }
@@ -302,16 +278,15 @@ fn run_search_with_token(
 
 fn resolve_output_format(
     cli_output: Option<cli::OutputFormat>,
-    cfg: &config::ConfigFile,
-    profile: Option<&str>,
+    fallback_output: Option<String>,
 ) -> cli::OutputFormat {
     // 1. CLI flag
     if let Some(f) = cli_output {
         return f;
     }
 
-    // 2. env var / 3. config
-    if let Some(s) = config::resolve_output(cfg, profile) {
+    // 2. env var / config value
+    if let Some(s) = fallback_output {
         match s.to_lowercase().as_str() {
             "table" => return cli::OutputFormat::Table,
             "tsv" => return cli::OutputFormat::Tsv,
@@ -320,7 +295,7 @@ fn resolve_output_format(
         }
     }
 
-    // 4. auto-detect
+    // 3. auto-detect
     if std::io::stdout().is_terminal() {
         cli::OutputFormat::Table
     } else {
@@ -479,17 +454,14 @@ fn run_send_with_resolved(send: cli::SendArgs, resolved: &config::ResolvedConfig
             format!("> {message}")
         };
 
-        let stdin = std::io::stdin();
-        if !stdin.is_terminal() {
+        if !std::io::stdin().is_terminal() {
             bail!("confirm is enabled but stdin is not a TTY (pass -y to skip confirmation)");
         }
 
-        eprint!("Send to {}:\n{summary}\nSend? [y/N] ", resolved.channel);
-        std::io::stderr().flush()?;
-
-        let mut input = String::new();
-        std::io::stdin().lock().read_line(&mut input)?;
-        if !matches!(input.trim(), "y" | "Y") {
+        if !confirm_yes_no(&format!(
+            "Send to {}:\n{summary}\nSend? [y/N] ",
+            resolved.channel
+        ))? {
             bail!("aborted");
         }
     }
