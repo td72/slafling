@@ -8,6 +8,10 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub profile: Option<String>,
 
+    /// Run without config file (all settings from env vars)
+    #[arg(long, global = true)]
+    pub headless: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 
