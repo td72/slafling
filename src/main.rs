@@ -63,8 +63,12 @@ fn main() -> Result<()> {
         }) => {
             let types_str = match types {
                 Some(t) => cli::search_types_to_api_string(&t),
-                None => config::resolve_search_types(&cfg, profile.as_deref())
-                    .unwrap_or_else(|| "public_channel".to_string()),
+                None => {
+                    let s = config::resolve_search_types(&cfg, profile.as_deref())
+                        .unwrap_or_else(|| "public_channel".to_string());
+                    config::validate_search_types_str(&s)?;
+                    s
+                }
             };
             run_search(profile.as_deref(), &query, output, &types_str, &cfg)
         }

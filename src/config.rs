@@ -305,7 +305,9 @@ pub fn resolve_search_types(config: &ConfigFile, profile_name: Option<&str>) -> 
 
 pub fn resolve_output(config: &ConfigFile, profile_name: Option<&str>) -> Option<String> {
     if let Ok(val) = std::env::var("SLAFLING_OUTPUT") {
-        return Some(val);
+        if !val.is_empty() {
+            return Some(val);
+        }
     }
 
     let mut output = config.default.output.clone();
@@ -409,6 +411,7 @@ pub fn format_size(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     fn minimal_config() -> ConfigFile {
         ConfigFile {
@@ -620,6 +623,7 @@ mod tests {
     // resolve_token() and describe_token_source() no longer check SLAFLING_TOKEN.
 
     #[test]
+    #[serial]
     fn resolve_token_from_env_success() {
         let prev = std::env::var("SLAFLING_TOKEN").ok();
         std::env::set_var("SLAFLING_TOKEN", "xoxb-env-test");
@@ -632,6 +636,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_token_from_env_empty_is_error() {
         let prev = std::env::var("SLAFLING_TOKEN").ok();
         std::env::set_var("SLAFLING_TOKEN", "");
@@ -661,6 +666,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn is_headless_env_values() {
         let prev = std::env::var("SLAFLING_HEADLESS").ok();
 
@@ -687,6 +693,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_from_env_success() {
         let prev_token = std::env::var("SLAFLING_TOKEN").ok();
         let prev_channel = std::env::var("SLAFLING_CHANNEL").ok();
@@ -721,6 +728,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_from_env_missing_channel() {
         let prev_token = std::env::var("SLAFLING_TOKEN").ok();
         let prev_channel = std::env::var("SLAFLING_CHANNEL").ok();
@@ -744,6 +752,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_from_env_missing_token() {
         let prev = std::env::var("SLAFLING_TOKEN").ok();
         std::env::remove_var("SLAFLING_TOKEN");
@@ -760,6 +769,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_from_env_defaults() {
         let prev_token = std::env::var("SLAFLING_TOKEN").ok();
         let prev_channel = std::env::var("SLAFLING_CHANNEL").ok();
@@ -788,5 +798,316 @@ mod tests {
         let cfg = result.unwrap();
         assert_eq!(cfg.max_file_size, DEFAULT_MAX_FILE_SIZE);
         assert!(!cfg.confirm);
+    }
+
+    // --- parse_file_size tests ---
+
+    #[test]
+    fn parse_file_size_bytes() {
+        assert_eq!(parse_file_size("100B").unwrap(), 100);
+    }
+
+    #[test]
+    fn parse_file_size_kb() {
+        assert_eq!(parse_file_size("1KB").unwrap(), KB);
+    }
+
+    #[test]
+    fn parse_file_size_mb() {
+        assert_eq!(parse_file_size("50MB").unwrap(), 50 * MB);
+    }
+
+    #[test]
+    fn parse_file_size_gb() {
+        assert_eq!(parse_file_size("2GB").unwrap(), 2 * GB);
+    }
+
+    #[test]
+    fn parse_file_size_short_units() {
+        assert_eq!(parse_file_size("1K").unwrap(), KB);
+        assert_eq!(parse_file_size("1M").unwrap(), MB);
+        assert_eq!(parse_file_size("1G").unwrap(), GB);
+    }
+
+    #[test]
+    fn parse_file_size_case_insensitive() {
+        assert_eq!(parse_file_size("100mb").unwrap(), 100 * MB);
+        assert_eq!(parse_file_size("100Mb").unwrap(), 100 * MB);
+    }
+
+    #[test]
+    fn parse_file_size_decimal() {
+        assert_eq!(parse_file_size("1.5MB").unwrap(), (1.5 * MB as f64) as u64);
+    }
+
+    #[test]
+    fn parse_file_size_no_unit() {
+        assert_eq!(parse_file_size("1024").unwrap(), 1024);
+    }
+
+    #[test]
+    fn parse_file_size_whitespace() {
+        assert_eq!(parse_file_size(" 100 MB ").unwrap(), 100 * MB);
+    }
+
+    #[test]
+    fn parse_file_size_zero() {
+        assert_eq!(parse_file_size("0MB").unwrap(), 0);
+    }
+
+    #[test]
+    fn parse_file_size_invalid_unit() {
+        let err = parse_file_size("1TB").unwrap_err();
+        assert!(err.to_string().contains("unknown file size unit"));
+    }
+
+    #[test]
+    fn parse_file_size_invalid_number() {
+        let err = parse_file_size("abcMB").unwrap_err();
+        assert!(err.to_string().contains("invalid number"));
+    }
+
+    // --- format_size tests ---
+
+    #[test]
+    fn format_size_zero() {
+        assert_eq!(format_size(0), "0B");
+    }
+
+    #[test]
+    fn format_size_bytes() {
+        assert_eq!(format_size(512), "512B");
+    }
+
+    #[test]
+    fn format_size_below_kb() {
+        assert_eq!(format_size(1023), "1023B");
+    }
+
+    #[test]
+    fn format_size_kb() {
+        assert_eq!(format_size(KB), "1.0KB");
+    }
+
+    #[test]
+    fn format_size_mb() {
+        assert_eq!(format_size(MB), "1.0MB");
+    }
+
+    #[test]
+    fn format_size_gb() {
+        assert_eq!(format_size(GB), "1.0GB");
+    }
+
+    // --- resolve_token_store tests ---
+
+    #[test]
+    fn resolve_token_store_from_config() {
+        let mut cfg = minimal_config();
+        cfg.default.token_store = Some("file".to_string());
+        assert_eq!(resolve_token_store(&cfg), "file");
+    }
+
+    #[test]
+    fn resolve_token_store_case_insensitive() {
+        let mut cfg = minimal_config();
+        cfg.default.token_store = Some("KEYCHAIN".to_string());
+        assert_eq!(resolve_token_store(&cfg), "keychain");
+    }
+
+    #[test]
+    fn resolve_token_store_default() {
+        let cfg = minimal_config();
+        assert_eq!(resolve_token_store(&cfg), default_token_store());
+    }
+
+    // --- resolve_search_types tests ---
+
+    #[test]
+    #[serial]
+    fn resolve_search_types_from_default() {
+        let mut cfg = minimal_config();
+        cfg.default.search_types = Some(vec!["public_channel".to_string(), "im".to_string()]);
+        let prev = std::env::var("SLAFLING_SEARCH_TYPES").ok();
+        std::env::remove_var("SLAFLING_SEARCH_TYPES");
+
+        let result = resolve_search_types(&cfg, None);
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_SEARCH_TYPES", v),
+            None => std::env::remove_var("SLAFLING_SEARCH_TYPES"),
+        }
+        assert_eq!(result.unwrap(), "public_channel,im");
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_search_types_profile_overrides_default() {
+        let mut cfg = minimal_config();
+        cfg.default.search_types = Some(vec!["public_channel".to_string()]);
+        cfg.profiles.insert(
+            "work".to_string(),
+            Profile {
+                channel: None,
+                max_file_size: None,
+                confirm: None,
+                output: None,
+                search_types: Some(vec!["private_channel".to_string()]),
+            },
+        );
+        let prev = std::env::var("SLAFLING_SEARCH_TYPES").ok();
+        std::env::remove_var("SLAFLING_SEARCH_TYPES");
+
+        let result = resolve_search_types(&cfg, Some("work"));
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_SEARCH_TYPES", v),
+            None => std::env::remove_var("SLAFLING_SEARCH_TYPES"),
+        }
+        assert_eq!(result.unwrap(), "private_channel");
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_search_types_env_var_overrides() {
+        let cfg = minimal_config();
+        let prev = std::env::var("SLAFLING_SEARCH_TYPES").ok();
+        std::env::set_var("SLAFLING_SEARCH_TYPES", "im,mpim");
+
+        let result = resolve_search_types(&cfg, None);
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_SEARCH_TYPES", v),
+            None => std::env::remove_var("SLAFLING_SEARCH_TYPES"),
+        }
+        assert_eq!(result.unwrap(), "im,mpim");
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_search_types_env_var_empty_falls_back() {
+        let mut cfg = minimal_config();
+        cfg.default.search_types = Some(vec!["public_channel".to_string()]);
+        let prev = std::env::var("SLAFLING_SEARCH_TYPES").ok();
+        std::env::set_var("SLAFLING_SEARCH_TYPES", "");
+
+        let result = resolve_search_types(&cfg, None);
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_SEARCH_TYPES", v),
+            None => std::env::remove_var("SLAFLING_SEARCH_TYPES"),
+        }
+        assert_eq!(result.unwrap(), "public_channel");
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_search_types_none_when_unset() {
+        let cfg = minimal_config();
+        let prev = std::env::var("SLAFLING_SEARCH_TYPES").ok();
+        std::env::remove_var("SLAFLING_SEARCH_TYPES");
+
+        let result = resolve_search_types(&cfg, None);
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_SEARCH_TYPES", v),
+            None => std::env::remove_var("SLAFLING_SEARCH_TYPES"),
+        }
+        assert!(result.is_none());
+    }
+
+    // --- resolve_output tests ---
+
+    #[test]
+    #[serial]
+    fn resolve_output_env_var() {
+        let cfg = minimal_config();
+        let prev = std::env::var("SLAFLING_OUTPUT").ok();
+        std::env::set_var("SLAFLING_OUTPUT", "json");
+
+        let result = resolve_output(&cfg, None);
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_OUTPUT", v),
+            None => std::env::remove_var("SLAFLING_OUTPUT"),
+        }
+        assert_eq!(result.unwrap(), "json");
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_output_env_var_empty_falls_back() {
+        let mut cfg = minimal_config();
+        cfg.default.output = Some("tsv".to_string());
+        let prev = std::env::var("SLAFLING_OUTPUT").ok();
+        std::env::set_var("SLAFLING_OUTPUT", "");
+
+        let result = resolve_output(&cfg, None);
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_OUTPUT", v),
+            None => std::env::remove_var("SLAFLING_OUTPUT"),
+        }
+        assert_eq!(result.unwrap(), "tsv");
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_output_from_default() {
+        let mut cfg = minimal_config();
+        cfg.default.output = Some("table".to_string());
+        let prev = std::env::var("SLAFLING_OUTPUT").ok();
+        std::env::remove_var("SLAFLING_OUTPUT");
+
+        let result = resolve_output(&cfg, None);
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_OUTPUT", v),
+            None => std::env::remove_var("SLAFLING_OUTPUT"),
+        }
+        assert_eq!(result.unwrap(), "table");
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_output_profile_overrides_default() {
+        let mut cfg = minimal_config();
+        cfg.default.output = Some("table".to_string());
+        cfg.profiles.insert(
+            "work".to_string(),
+            Profile {
+                channel: None,
+                max_file_size: None,
+                confirm: None,
+                output: Some("json".to_string()),
+                search_types: None,
+            },
+        );
+        let prev = std::env::var("SLAFLING_OUTPUT").ok();
+        std::env::remove_var("SLAFLING_OUTPUT");
+
+        let result = resolve_output(&cfg, Some("work"));
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_OUTPUT", v),
+            None => std::env::remove_var("SLAFLING_OUTPUT"),
+        }
+        assert_eq!(result.unwrap(), "json");
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_output_none_when_unset() {
+        let cfg = minimal_config();
+        let prev = std::env::var("SLAFLING_OUTPUT").ok();
+        std::env::remove_var("SLAFLING_OUTPUT");
+
+        let result = resolve_output(&cfg, None);
+
+        match prev {
+            Some(v) => std::env::set_var("SLAFLING_OUTPUT", v),
+            None => std::env::remove_var("SLAFLING_OUTPUT"),
+        }
+        assert!(result.is_none());
     }
 }

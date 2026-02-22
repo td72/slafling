@@ -25,6 +25,7 @@ ureq = { version = "3", features = ["json"] }
 keyring = { version = "3", features = ["apple-native"] }
 
 [dev-dependencies]
+serial_test = "3"
 tempfile = "3"
 
 [profile.release]
