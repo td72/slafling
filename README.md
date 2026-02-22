@@ -52,10 +52,9 @@ This creates `~/.config/slafling/config.toml` and stores your Bot Token securely
 
 ### Token Management
 
-Tokens are **not** stored in `config.toml`. They are resolved in this order:
+Tokens are **not** stored in `config.toml`. They are resolved from the backend specified by `token_store` — Keychain (`"keychain"`, default on macOS) or token file (`"file"`, default on other platforms).
 
-1. **`SLAFLING_TOKEN` environment variable** (shared across profiles, for CI/CD and temporary overrides)
-2. **Backend specified by `token_store`** — Keychain (`"keychain"`, default on macOS) or token file (`"file"`, default on other platforms)
+In headless mode, `SLAFLING_TOKEN` environment variable is used instead.
 
 Token storage location: `<data_dir>/slafling/tokens/<profile>` (file) or macOS Keychain service `slafling` (keychain). `<data_dir>` is `~/Library/Application Support` on macOS, `~/.local/share` on Linux.
 

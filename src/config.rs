@@ -372,7 +372,7 @@ pub fn resolve_token_from_env() -> Result<String> {
         .context("in headless mode, SLAFLING_TOKEN must be set")
 }
 
-/// Resolve search_types from SLAFLING_SEARCH_TYPES env var (headless mode).
+/// Resolve search_types from SLAFLING_SEARCH_TYPES env var.
 pub fn resolve_search_types_from_env() -> Option<String> {
     std::env::var("SLAFLING_SEARCH_TYPES")
         .ok()

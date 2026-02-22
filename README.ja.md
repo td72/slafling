@@ -52,10 +52,9 @@ Bot Tokenを入力すると `~/.config/slafling/config.toml` を生成し、ト�
 
 ### トークン管理
 
-トークンは `config.toml` には**保存されません**。以下の優先順位で解決されます:
+トークンは `config.toml` には**保存されません**。`token_store` で指定されたバックエンドから解決されます — Keychain (`"keychain"`, macOS デフォルト) またはトークンファイル (`"file"`, 他プラットフォームのデフォルト)。
 
-1. **`SLAFLING_TOKEN` 環境変数** (全プロファイル共通、CI/CD や一時的なオーバーライド用)
-2. **`token_store` で指定されたバックエンド** — Keychain (`"keychain"`, macOS デフォルト) またはトークンファイル (`"file"`, 他プラットフォームのデフォルト)
+Headless モードでは `SLAFLING_TOKEN` 環境変数が代わりに使用されます。
 
 トークン保存先: `<data_dir>/slafling/tokens/<プロファイル名>` (file) または macOS Keychain サービス `slafling` (keychain)。`<data_dir>` は macOS では `~/Library/Application Support`、Linux では `~/.local/share`。
 
