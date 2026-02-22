@@ -90,7 +90,7 @@ fn run_init() -> Result<()> {
         }
     }
 
-    let token_value = prompt_token()?;
+    let token_value = prompt_token("init")?;
 
     // Store token using platform default (config doesn't exist yet)
     store_token(config::default_token_store(), None, &token_value)?;
@@ -141,10 +141,10 @@ fn confirm_yes_no(prompt: &str) -> Result<bool> {
     Ok(matches!(input.trim(), "y" | "Y"))
 }
 
-fn prompt_token() -> Result<String> {
+fn prompt_token(command: &str) -> Result<String> {
     let stdin = std::io::stdin();
     if !stdin.is_terminal() {
-        bail!("token input requires interactive input (stdin must be a TTY)");
+        bail!("{command} requires interactive input (stdin must be a TTY)");
     }
     eprint!("Bot Token (xoxb-...): ");
     std::io::stderr().flush()?;
@@ -193,7 +193,7 @@ fn run_token(action: &cli::TokenAction, profile: Option<&str>) -> Result<()> {
 }
 
 fn run_token_set(profile: Option<&str>) -> Result<()> {
-    let token_value = prompt_token()?;
+    let token_value = prompt_token("token set")?;
     let token_store = load_token_store()?;
     store_token(&token_store, profile, &token_value)?;
     Ok(())
@@ -278,7 +278,7 @@ fn run_search_with_token(
 
 fn resolve_output_format(
     cli_output: Option<cli::OutputFormat>,
-    config_output: Option<String>,
+    fallback_output: Option<String>,
 ) -> cli::OutputFormat {
     // 1. CLI flag
     if let Some(f) = cli_output {
@@ -286,7 +286,7 @@ fn resolve_output_format(
     }
 
     // 2. env var / config value
-    if let Some(s) = config_output {
+    if let Some(s) = fallback_output {
         match s.to_lowercase().as_str() {
             "table" => return cli::OutputFormat::Table,
             "tsv" => return cli::OutputFormat::Tsv,
