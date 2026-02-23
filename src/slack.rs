@@ -179,8 +179,9 @@ pub struct ChannelInfo {
     pub user_id: Option<String>,
 }
 
-pub fn search_channels(token: &str, query: &str, types: &str) -> Result<Vec<ChannelInfo>> {
+pub fn search_channels(token: &str, query: &str, types: &[SearchType]) -> Result<Vec<ChannelInfo>> {
     let query_lower = query.to_lowercase();
+    let types_str = crate::cli::search_types_to_api_string(types);
     let mut results = Vec::new();
     let mut cursor = String::new();
 
@@ -188,7 +189,7 @@ pub fn search_channels(token: &str, query: &str, types: &str) -> Result<Vec<Chan
         let mut params = vec![
             ("limit".to_string(), "200".to_string()),
             ("exclude_archived".to_string(), "true".to_string()),
-            ("types".to_string(), types.to_string()),
+            ("types".to_string(), types_str.clone()),
         ];
         if !cursor.is_empty() {
             params.push(("cursor".to_string(), cursor.clone()));

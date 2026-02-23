@@ -220,17 +220,16 @@ fn run_search(
             .clone()
             .unwrap_or_else(|| vec![cli::SearchType::PublicChannel])
     });
-    let types_str = cli::search_types_to_api_string(&types);
     let format = resolve_output_format(cli_output, config.output);
 
-    run_search_with_token(&token, query, format, &types_str)
+    run_search_with_token(&token, query, format, &types)
 }
 
 fn run_search_with_token(
     token: &str,
     query: &str,
     format: cli::OutputFormat,
-    types: &str,
+    types: &[cli::SearchType],
 ) -> Result<()> {
     let channels = slack::search_channels(token, query, types)?;
 
