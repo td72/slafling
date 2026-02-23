@@ -85,7 +85,11 @@ fn run_init() -> Result<()> {
     let token_value = prompt_token("init")?;
 
     // Store token using platform default (config doesn't exist yet)
-    store_token(config::default_token_store(), None, &token_value)?;
+    store_token(
+        config::TokenStore::default_for_platform(),
+        None,
+        &token_value,
+    )?;
 
     // Write config without token
     config::write_init_config(&path)?;
@@ -118,28 +122,31 @@ fn prompt_token(command: &str) -> Result<String> {
     Ok(value)
 }
 
-fn store_token(token_store: &str, profile: Option<&str>, token_value: &str) -> Result<()> {
+fn store_token(
+    token_store: config::TokenStore,
+    profile: Option<&str>,
+    token_value: &str,
+) -> Result<()> {
     match token_store {
-        "keychain" => {
+        config::TokenStore::Keychain => {
             keychain::set_token(profile, token_value)?;
             let account = profile.unwrap_or("default");
             eprintln!("token stored in Keychain (account: {account})");
         }
-        "file" => {
+        config::TokenStore::File => {
             token::set_token(profile, token_value)?;
             let path = token::token_path(profile)?;
             eprintln!("token stored in {}", path.display());
         }
-        _ => bail!("invalid token_store '{token_store}'"),
     }
     Ok(())
 }
 
 /// Load token_store from config file, falling back to platform default if config doesn't exist.
-fn load_token_store() -> Result<String> {
+fn load_token_store() -> Result<config::TokenStore> {
     let path = config::config_path()?;
     if !path.exists() {
-        return Ok(config::default_token_store().to_string());
+        return Ok(config::TokenStore::default_for_platform());
     }
     let cfg = config::load_config()?;
     Ok(config::resolve_token_store(&cfg))
@@ -156,15 +163,15 @@ fn run_token(action: &cli::TokenAction, profile: Option<&str>) -> Result<()> {
 fn run_token_set(profile: Option<&str>) -> Result<()> {
     let token_value = prompt_token("token set")?;
     let token_store = load_token_store()?;
-    store_token(&token_store, profile, &token_value)?;
+    store_token(token_store, profile, &token_value)?;
     Ok(())
 }
 
 fn run_token_delete(profile: Option<&str>) -> Result<()> {
     let token_store = load_token_store()?;
 
-    match token_store.as_str() {
-        "keychain" => {
+    match token_store {
+        config::TokenStore::Keychain => {
             let account = profile.unwrap_or("default");
             if keychain::get_token(profile)?.is_none() {
                 bail!("no stored token found for profile '{account}'");
@@ -172,7 +179,7 @@ fn run_token_delete(profile: Option<&str>) -> Result<()> {
             keychain::delete_token(profile)?;
             eprintln!("deleted token from Keychain (account: {account})");
         }
-        "file" => {
+        config::TokenStore::File => {
             let path = token::token_path(profile)?;
             if !path.exists() {
                 let name = profile.unwrap_or("default");
@@ -181,7 +188,6 @@ fn run_token_delete(profile: Option<&str>) -> Result<()> {
             token::delete_token(profile)?;
             eprintln!("deleted {}", path.display());
         }
-        _ => bail!("invalid token_store '{token_store}'"),
     }
 
     Ok(())
@@ -189,7 +195,7 @@ fn run_token_delete(profile: Option<&str>) -> Result<()> {
 
 fn run_token_show(profile: Option<&str>) -> Result<()> {
     let token_store = load_token_store()?;
-    match config::describe_token_source(&token_store, profile) {
+    match config::describe_token_source(token_store, profile) {
         Ok((source, location)) => {
             println!("source: {source}");
             println!("location: {location}");
@@ -208,22 +214,14 @@ fn run_search(
     types: Option<Vec<cli::SearchType>>,
 ) -> Result<()> {
     let token = config.resolve_token()?;
-    let types_str = match types {
-        Some(t) => cli::search_types_to_api_string(&t),
-        None => {
-            let s = config
-                .search_types
-                .clone()
-                .unwrap_or_else(|| "public_channel".to_string());
-            config::validate_search_types_str(&s)?;
-            s
-        }
-    };
-    let fallback_output = config.output.clone();
-    if let Some(ref s) = fallback_output {
-        config::validate_output_str(s)?;
-    }
-    let format = resolve_output_format(cli_output, fallback_output);
+    let types = types.unwrap_or_else(|| {
+        config
+            .search_types
+            .clone()
+            .unwrap_or_else(|| vec![cli::SearchType::PublicChannel])
+    });
+    let types_str = cli::search_types_to_api_string(&types);
+    let format = resolve_output_format(cli_output, config.output);
 
     run_search_with_token(&token, query, format, &types_str)
 }
@@ -252,21 +250,16 @@ fn run_search_with_token(
 
 fn resolve_output_format(
     cli_output: Option<cli::OutputFormat>,
-    fallback_output: Option<String>,
+    config_output: Option<cli::OutputFormat>,
 ) -> cli::OutputFormat {
     // 1. CLI flag
     if let Some(f) = cli_output {
         return f;
     }
 
-    // 2. env var / config value
-    if let Some(s) = fallback_output {
-        match s.to_lowercase().as_str() {
-            "table" => return cli::OutputFormat::Table,
-            "tsv" => return cli::OutputFormat::Tsv,
-            "json" => return cli::OutputFormat::Json,
-            _ => {}
-        }
+    // 2. config / env var value
+    if let Some(f) = config_output {
+        return f;
     }
 
     // 3. auto-detect
@@ -475,35 +468,29 @@ mod tests {
 
     #[test]
     fn resolve_output_format_cli_flag_wins() {
-        let result =
-            resolve_output_format(Some(cli::OutputFormat::Json), Some("table".to_string()));
+        let result = resolve_output_format(
+            Some(cli::OutputFormat::Json),
+            Some(cli::OutputFormat::Table),
+        );
         assert!(matches!(result, cli::OutputFormat::Json));
     }
 
     #[test]
     fn resolve_output_format_fallback_table() {
-        let result = resolve_output_format(None, Some("table".to_string()));
+        let result = resolve_output_format(None, Some(cli::OutputFormat::Table));
         assert!(matches!(result, cli::OutputFormat::Table));
     }
 
     #[test]
     fn resolve_output_format_fallback_tsv() {
-        let result = resolve_output_format(None, Some("tsv".to_string()));
+        let result = resolve_output_format(None, Some(cli::OutputFormat::Tsv));
         assert!(matches!(result, cli::OutputFormat::Tsv));
     }
 
     #[test]
     fn resolve_output_format_fallback_json() {
-        let result = resolve_output_format(None, Some("json".to_string()));
+        let result = resolve_output_format(None, Some(cli::OutputFormat::Json));
         assert!(matches!(result, cli::OutputFormat::Json));
-    }
-
-    #[test]
-    fn resolve_output_format_fallback_case_insensitive() {
-        let result = resolve_output_format(None, Some("JSON".to_string()));
-        assert!(matches!(result, cli::OutputFormat::Json));
-        let result = resolve_output_format(None, Some("Table".to_string()));
-        assert!(matches!(result, cli::OutputFormat::Table));
     }
 
     #[test]

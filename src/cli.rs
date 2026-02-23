@@ -1,3 +1,4 @@
+use anyhow::bail;
 use clap::{Parser, Subcommand, ValueEnum};
 
 /// Fling messages to Slack
@@ -79,7 +80,7 @@ pub enum TokenAction {
     Show,
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, ValueEnum)]
 #[value(rename_all = "snake_case")]
 pub enum SearchType {
     PublicChannel,
@@ -107,11 +108,45 @@ pub fn search_types_to_api_string(types: &[SearchType]) -> String {
         .join(",")
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, ValueEnum)]
 pub enum OutputFormat {
     Table,
     Tsv,
     Json,
+}
+
+pub fn parse_search_types_str(s: &str) -> anyhow::Result<Vec<SearchType>> {
+    s.split(',').map(|t| t.trim().parse()).collect()
+}
+
+impl std::str::FromStr for OutputFormat {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        match s.to_lowercase().as_str() {
+            "table" => Ok(Self::Table),
+            "tsv" => Ok(Self::Tsv),
+            "json" => Ok(Self::Json),
+            _ => bail!("invalid output '{}' (valid: table, tsv, json)", s),
+        }
+    }
+}
+
+impl std::str::FromStr for SearchType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        match s.to_lowercase().as_str() {
+            "public_channel" => Ok(Self::PublicChannel),
+            "private_channel" => Ok(Self::PrivateChannel),
+            "im" => Ok(Self::Im),
+            "mpim" => Ok(Self::Mpim),
+            _ => bail!(
+                "invalid search type '{}' (valid: public_channel, private_channel, im, mpim)",
+                s
+            ),
+        }
+    }
 }
 
 #[cfg(test)]
