@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::cli::SearchType;
+use crate::cli::ChannelType;
 
 #[derive(Serialize)]
 struct PostMessageBody<'a> {
@@ -164,6 +164,20 @@ struct Channel {
     user: Option<String>,
 }
 
+impl Channel {
+    fn channel_type(&self) -> ChannelType {
+        if self.is_im {
+            ChannelType::Im
+        } else if self.is_mpim {
+            ChannelType::Mpim
+        } else if self.is_private {
+            ChannelType::PrivateChannel
+        } else {
+            ChannelType::PublicChannel
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct ResponseMetadata {
     next_cursor: Option<String>,
@@ -173,15 +187,19 @@ struct ResponseMetadata {
 pub struct ChannelInfo {
     pub name: String,
     #[serde(rename = "type")]
-    pub channel_type: SearchType,
+    pub channel_type: ChannelType,
     pub channel_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
 }
 
-pub fn search_channels(token: &str, query: &str, types: &[SearchType]) -> Result<Vec<ChannelInfo>> {
+pub fn search_channels(
+    token: &str,
+    query: &str,
+    types: &[ChannelType],
+) -> Result<Vec<ChannelInfo>> {
     let query_lower = query.to_lowercase();
-    let types_str = crate::cli::search_types_to_api_string(types);
+    let types_str = crate::cli::channel_types_to_api_string(types);
     let mut results = Vec::new();
     let mut cursor = String::new();
 
@@ -218,18 +236,9 @@ pub fn search_channels(token: &str, query: &str, types: &[SearchType]) -> Result
                 .unwrap_or_else(|| ch.id.clone());
 
             if display_name.to_lowercase().contains(&query_lower) {
-                let channel_type = if ch.is_im {
-                    SearchType::Im
-                } else if ch.is_mpim {
-                    SearchType::Mpim
-                } else if ch.is_private {
-                    SearchType::PrivateChannel
-                } else {
-                    SearchType::PublicChannel
-                };
                 results.push(ChannelInfo {
                     name: display_name,
-                    channel_type,
+                    channel_type: ch.channel_type(),
                     channel_id: ch.id.clone(),
                     user_id: ch.user.clone(),
                 });

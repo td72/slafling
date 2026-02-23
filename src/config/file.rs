@@ -149,7 +149,7 @@ fn validate_section_values(
 
     if let Some(types) = search_types {
         for val in types {
-            val.parse::<crate::cli::SearchType>()
+            val.parse::<crate::cli::ChannelType>()
                 .map_err(|e| anyhow!("{} in [{}]", e, section))?;
         }
     }

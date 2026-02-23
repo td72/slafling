@@ -24,7 +24,7 @@ pub struct Config {
     pub max_file_size: Option<String>,
     pub confirm: bool,
     pub output: Option<cli::OutputFormat>,
-    pub search_types: Option<Vec<cli::SearchType>>,
+    pub search_types: Option<Vec<cli::ChannelType>>,
 }
 
 impl Config {
@@ -52,7 +52,7 @@ impl Config {
             .as_deref()
             .map(|s| s.parse())
             .transpose()?;
-        let mut search_types: Option<Vec<cli::SearchType>> = file
+        let mut search_types: Option<Vec<cli::ChannelType>> = file
             .default
             .search_types
             .as_deref()
@@ -90,7 +90,7 @@ impl Config {
         }
         if let Some(ref val) = env.search_types {
             search_types = Some(
-                cli::parse_search_types_str(val)
+                cli::parse_channel_types_str(val)
                     .map_err(|e| anyhow!("SLAFLING_SEARCH_TYPES: {}", e))?,
             );
         }
@@ -118,7 +118,7 @@ impl Config {
         };
         let search_types = match env.search_types.as_deref() {
             Some(s) => Some(
-                cli::parse_search_types_str(s)
+                cli::parse_channel_types_str(s)
                     .map_err(|e| anyhow!("SLAFLING_SEARCH_TYPES: {}", e))?,
             ),
             None => None,
@@ -231,7 +231,7 @@ mod tests {
     use super::super::file::{ConfigFile, DefaultConfig, Profile};
     use super::super::util::{DEFAULT_MAX_FILE_SIZE, MB};
     use super::*;
-    use crate::cli::{OutputFormat, SearchType};
+    use crate::cli::{ChannelType, OutputFormat};
 
     fn minimal_config() -> ConfigFile {
         ConfigFile {
@@ -311,7 +311,7 @@ mod tests {
         let config = Config::new(Some(&cfg), None, &no_env()).unwrap();
         assert_eq!(
             config.search_types.unwrap(),
-            vec![SearchType::PublicChannel, SearchType::Im]
+            vec![ChannelType::PublicChannel, ChannelType::Im]
         );
     }
 
@@ -332,7 +332,7 @@ mod tests {
         let config = Config::new(Some(&cfg), Some("work"), &no_env()).unwrap();
         assert_eq!(
             config.search_types.unwrap(),
-            vec![SearchType::PrivateChannel]
+            vec![ChannelType::PrivateChannel]
         );
     }
 
@@ -346,7 +346,7 @@ mod tests {
         let config = Config::new(Some(&cfg), None, &env).unwrap();
         assert_eq!(
             config.search_types.unwrap(),
-            vec![SearchType::Im, SearchType::Mpim]
+            vec![ChannelType::Im, ChannelType::Mpim]
         );
     }
 
@@ -357,7 +357,7 @@ mod tests {
         let config = Config::new(Some(&cfg), None, &no_env()).unwrap();
         assert_eq!(
             config.search_types.unwrap(),
-            vec![SearchType::PublicChannel]
+            vec![ChannelType::PublicChannel]
         );
     }
 

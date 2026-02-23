@@ -211,14 +211,14 @@ fn run_search(
     config: &config::Config,
     query: &str,
     cli_output: Option<cli::OutputFormat>,
-    types: Option<Vec<cli::SearchType>>,
+    types: Option<Vec<cli::ChannelType>>,
 ) -> Result<()> {
     let token = config.resolve_token()?;
     let types = types.unwrap_or_else(|| {
         config
             .search_types
             .clone()
-            .unwrap_or_else(|| vec![cli::SearchType::PublicChannel])
+            .unwrap_or_else(|| vec![cli::ChannelType::PublicChannel])
     });
     let format = resolve_output_format(cli_output, config.output);
 
@@ -229,7 +229,7 @@ fn run_search_with_token(
     token: &str,
     query: &str,
     format: cli::OutputFormat,
-    types: &[cli::SearchType],
+    types: &[cli::ChannelType],
 ) -> Result<()> {
     let channels = slack::search_channels(token, query, types)?;
 
