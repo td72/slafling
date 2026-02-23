@@ -1,5 +1,6 @@
 use anyhow::bail;
 use clap::{Parser, Subcommand, ValueEnum};
+use serde::Serialize;
 
 /// Fling messages to Slack
 #[derive(Parser)]
@@ -80,7 +81,8 @@ pub enum TokenAction {
     Show,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
 #[value(rename_all = "snake_case")]
 pub enum SearchType {
     PublicChannel,

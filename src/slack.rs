@@ -1,6 +1,8 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::cli::SearchType;
+
 #[derive(Serialize)]
 struct PostMessageBody<'a> {
     channel: &'a str,
@@ -171,7 +173,7 @@ struct ResponseMetadata {
 pub struct ChannelInfo {
     pub name: String,
     #[serde(rename = "type")]
-    pub channel_type: String,
+    pub channel_type: SearchType,
     pub channel_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
@@ -216,17 +218,17 @@ pub fn search_channels(token: &str, query: &str, types: &str) -> Result<Vec<Chan
 
             if display_name.to_lowercase().contains(&query_lower) {
                 let channel_type = if ch.is_im {
-                    "im"
+                    SearchType::Im
                 } else if ch.is_mpim {
-                    "mpim"
+                    SearchType::Mpim
                 } else if ch.is_private {
-                    "private_channel"
+                    SearchType::PrivateChannel
                 } else {
-                    "public_channel"
+                    SearchType::PublicChannel
                 };
                 results.push(ChannelInfo {
                     name: display_name,
-                    channel_type: channel_type.to_string(),
+                    channel_type,
                     channel_id: ch.id.clone(),
                     user_id: ch.user.clone(),
                 });

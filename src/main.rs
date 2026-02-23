@@ -279,7 +279,7 @@ fn print_table(channels: &[slack::ChannelInfo]) {
         .max(4);
     let type_width = channels
         .iter()
-        .map(|c| c.channel_type.len())
+        .map(|c| c.channel_type.as_api_str().len())
         .max()
         .unwrap_or(4)
         .max(4);
@@ -300,7 +300,7 @@ fn print_table(channels: &[slack::ChannelInfo]) {
             println!(
                 "{:<name_width$}  {:<type_width$}  {:<13}  {}",
                 ch.name,
-                ch.channel_type,
+                ch.channel_type.as_api_str(),
                 ch.channel_id,
                 ch.user_id.as_deref().unwrap_or("")
             );
@@ -313,7 +313,9 @@ fn print_table(channels: &[slack::ChannelInfo]) {
         for ch in channels {
             println!(
                 "{:<name_width$}  {:<type_width$}  {}",
-                ch.name, ch.channel_type, ch.channel_id
+                ch.name,
+                ch.channel_type.as_api_str(),
+                ch.channel_id
             );
         }
     }
@@ -324,7 +326,7 @@ fn print_tsv(channels: &[slack::ChannelInfo]) {
         println!(
             "{}\t{}\t{}\t{}",
             ch.name,
-            ch.channel_type,
+            ch.channel_type.as_api_str(),
             ch.channel_id,
             ch.user_id.as_deref().unwrap_or("")
         );
