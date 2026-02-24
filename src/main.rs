@@ -195,15 +195,9 @@ fn run_token_delete(profile: Option<&str>) -> Result<()> {
 
 fn run_token_show(profile: Option<&str>) -> Result<()> {
     let token_store = load_token_store()?;
-    match config::describe_token_source(token_store, profile) {
-        Ok((source, location)) => {
-            println!("source: {source}");
-            println!("location: {location}");
-        }
-        Err(e) => {
-            println!("not configured: {e}");
-        }
-    }
+    let (source, location) = config::describe_token_source(token_store, profile)?;
+    println!("source: {source}");
+    println!("location: {location}");
     Ok(())
 }
 
@@ -355,7 +349,10 @@ fn run_send_with_resolved(send: cli::SendArgs, resolved: &config::ResolvedConfig
             bail!("no input provided (use -t, -f, or pipe via stdin)");
         }
         let mut buf = String::new();
-        stdin.lock().read_to_string(&mut buf)?;
+        stdin
+            .lock()
+            .read_to_string(&mut buf)
+            .context("failed to read from stdin")?;
         buf.truncate(buf.trim_end().len());
         (Some(buf), None)
     } else {
@@ -373,7 +370,10 @@ fn run_send_with_resolved(send: cli::SendArgs, resolved: &config::ResolvedConfig
                     bail!("--file requires stdin input but stdin is a terminal");
                 }
                 let mut buf = Vec::new();
-                stdin.lock().read_to_end(&mut buf)?;
+                stdin
+                    .lock()
+                    .read_to_end(&mut buf)
+                    .context("failed to read from stdin")?;
                 Some((send.filename.clone(), buf))
             }
             Some(path) => {
@@ -400,7 +400,10 @@ fn run_send_with_resolved(send: cli::SendArgs, resolved: &config::ResolvedConfig
                     bail!("--text requires stdin input but stdin is a terminal");
                 }
                 let mut buf = String::new();
-                stdin.lock().read_to_string(&mut buf)?;
+                stdin
+                    .lock()
+                    .read_to_string(&mut buf)
+                    .context("failed to read from stdin")?;
                 buf.truncate(buf.trim_end().len());
                 Some(buf)
             }

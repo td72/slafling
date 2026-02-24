@@ -50,13 +50,23 @@ impl Config {
             .default
             .output
             .as_deref()
-            .map(|s| s.parse())
+            .map(|s| {
+                s.parse()
+                    .with_context(|| format!("invalid output in [default]: '{s}'"))
+            })
             .transpose()?;
         let mut search_types: Option<Vec<cli::ChannelType>> = file
             .default
             .search_types
             .as_deref()
-            .map(|v| v.iter().map(|s| s.parse()).collect::<Result<Vec<_>>>())
+            .map(|v| {
+                v.iter()
+                    .map(|s| {
+                        s.parse()
+                            .with_context(|| format!("invalid search_types in [default]: '{s}'"))
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })
             .transpose()?;
 
         if let Some(name) = profile {
@@ -71,10 +81,20 @@ impl Config {
                 confirm = c;
             }
             if let Some(ref v) = p.output {
-                output = Some(v.parse()?);
+                output = Some(
+                    v.parse()
+                        .with_context(|| format!("invalid output in [{name}]: '{v}'"))?,
+                );
             }
             if let Some(ref v) = p.search_types {
-                search_types = Some(v.iter().map(|s| s.parse()).collect::<Result<Vec<_>>>()?);
+                search_types = Some(
+                    v.iter()
+                        .map(|s| {
+                            s.parse()
+                                .with_context(|| format!("invalid search_types in [{name}]: '{s}'"))
+                        })
+                        .collect::<Result<Vec<_>>>()?,
+                );
             }
         }
 
