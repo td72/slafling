@@ -156,7 +156,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn search_types_to_api_string_single() {
+    fn channel_types_to_api_string_single() {
         assert_eq!(
             channel_types_to_api_string(&[ChannelType::PublicChannel]),
             "public_channel"
@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn search_types_to_api_string_multiple() {
+    fn channel_types_to_api_string_multiple() {
         assert_eq!(
             channel_types_to_api_string(&[
                 ChannelType::PublicChannel,
@@ -177,12 +177,12 @@ mod tests {
     }
 
     #[test]
-    fn search_types_to_api_string_empty() {
+    fn channel_types_to_api_string_empty() {
         assert_eq!(channel_types_to_api_string(&[]), "");
     }
 
     #[test]
-    fn search_types_to_api_string_order_preserved() {
+    fn channel_types_to_api_string_order_preserved() {
         assert_eq!(
             channel_types_to_api_string(&[ChannelType::Mpim, ChannelType::Im]),
             "mpim,im"
