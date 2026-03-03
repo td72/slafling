@@ -204,16 +204,27 @@ impl Config {
 }
 
 /// Resolve token from token_store backend (keychain or file).
+/// Falls back to default profile token when a named profile has no token.
 pub fn resolve_token(token_store: TokenStore, profile_name: Option<&str>) -> Result<String> {
     match token_store {
         TokenStore::Keychain => {
             if let Some(t) = keychain::get_token(profile_name)? {
                 return Ok(t);
             }
+            if profile_name.is_some() {
+                if let Some(t) = keychain::get_token(None)? {
+                    return Ok(t);
+                }
+            }
         }
         TokenStore::File => {
             if let Some(t) = token::get_token(profile_name)? {
                 return Ok(t);
+            }
+            if profile_name.is_some() {
+                if let Some(t) = token::get_token(None)? {
+                    return Ok(t);
+                }
             }
         }
     }
@@ -222,6 +233,7 @@ pub fn resolve_token(token_store: TokenStore, profile_name: Option<&str>) -> Res
 }
 
 /// Describe where the token is currently resolved from.
+/// Falls back to default profile token when a named profile has no token.
 pub fn describe_token_source(
     token_store: TokenStore,
     profile_name: Option<&str>,
@@ -231,11 +243,20 @@ pub fn describe_token_source(
             if keychain::get_token(profile_name)?.is_some() {
                 return Ok(("keychain", "macOS Keychain".to_string()));
             }
+            if profile_name.is_some() && keychain::get_token(None)?.is_some() {
+                return Ok(("keychain", "macOS Keychain (default)".to_string()));
+            }
         }
         TokenStore::File => {
             let path = token::token_path(profile_name)?;
             if token::get_token(profile_name)?.is_some() {
                 return Ok(("file", path.display().to_string()));
+            }
+            if profile_name.is_some() {
+                let default_path = token::token_path(None)?;
+                if token::get_token(None)?.is_some() {
+                    return Ok(("file", format!("{} (default)", default_path.display())));
+                }
             }
         }
     }
@@ -473,5 +494,97 @@ mod tests {
         };
         let config = Config::new(Some(&cfg), None, &env).unwrap();
         assert!(config.confirm);
+    }
+
+    // --- resolve_token / describe_token_source fallback tests ---
+
+    use serial_test::serial;
+
+    const TEST_PROFILE: &str = "__test_fallback__";
+
+    fn cleanup_test_tokens() {
+        let _ = token::delete_token(None);
+        let _ = token::delete_token(Some(TEST_PROFILE));
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_token_file_fallback_to_default() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+
+        let result = resolve_token(TokenStore::File, Some(TEST_PROFILE)).unwrap();
+        assert_eq!(result, "xoxb-default");
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_token_file_profile_takes_priority() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+        token::set_token(Some(TEST_PROFILE), "xoxb-profile").unwrap();
+
+        let result = resolve_token(TokenStore::File, Some(TEST_PROFILE)).unwrap();
+        assert_eq!(result, "xoxb-profile");
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_token_file_no_fallback_when_default_profile() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+
+        let result = resolve_token(TokenStore::File, None).unwrap();
+        assert_eq!(result, "xoxb-default");
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_token_file_error_when_no_token() {
+        cleanup_test_tokens();
+
+        let err = resolve_token(TokenStore::File, Some(TEST_PROFILE)).unwrap_err();
+        assert!(err.to_string().contains("token is not configured"));
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn describe_token_source_file_fallback_to_default() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+
+        let (backend, desc) = describe_token_source(TokenStore::File, Some(TEST_PROFILE)).unwrap();
+        assert_eq!(backend, "file");
+        assert!(
+            desc.contains("(default)"),
+            "expected '(default)' in: {desc}"
+        );
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn describe_token_source_file_profile_takes_priority() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+        token::set_token(Some(TEST_PROFILE), "xoxb-profile").unwrap();
+
+        let (backend, desc) = describe_token_source(TokenStore::File, Some(TEST_PROFILE)).unwrap();
+        assert_eq!(backend, "file");
+        assert!(
+            !desc.contains("(default)"),
+            "expected no '(default)' in: {desc}"
+        );
+
+        cleanup_test_tokens();
     }
 }
