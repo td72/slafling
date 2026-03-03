@@ -17,6 +17,10 @@ pub fn parse_file_size(s: &str) -> Result<u64> {
         .parse()
         .with_context(|| format!("invalid number in file size: '{s}'"))?;
 
+    if !num.is_finite() || num < 0.0 {
+        bail!("invalid file size: '{s}'");
+    }
+
     let multiplier: u64 = match unit.as_str() {
         "" | "B" => 1,
         "KB" | "K" => KB,
@@ -81,6 +85,8 @@ mod tests {
     #[rstest]
     #[case("1TB", "unknown file size unit")]
     #[case("abcMB", "invalid number")]
+    #[case("-1MB", "invalid file size")]
+    #[case("-0.5GB", "invalid file size")]
     fn parse_file_size_invalid(#[case] input: &str, #[case] msg: &str) {
         assert!(parse_file_size(input)
             .unwrap_err()

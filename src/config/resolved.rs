@@ -371,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn config_new_search_types_env_var_empty_falls_back() {
+    fn config_new_search_types_default_without_env() {
         let mut cfg = minimal_config();
         cfg.default.search_types = Some(vec!["public_channel".to_string()]);
         let config = Config::new(Some(&cfg), None, &no_env()).unwrap();
@@ -402,7 +402,7 @@ mod tests {
     }
 
     #[test]
-    fn config_new_output_env_var_empty_falls_back() {
+    fn config_new_output_default_without_env() {
         let mut cfg = minimal_config();
         cfg.default.output = Some("tsv".to_string());
         let config = Config::new(Some(&cfg), None, &no_env()).unwrap();
