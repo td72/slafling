@@ -495,4 +495,96 @@ mod tests {
         let config = Config::new(Some(&cfg), None, &env).unwrap();
         assert!(config.confirm);
     }
+
+    // --- resolve_token / describe_token_source fallback tests ---
+
+    use serial_test::serial;
+
+    const TEST_PROFILE: &str = "__test_fallback__";
+
+    fn cleanup_test_tokens() {
+        let _ = token::delete_token(None);
+        let _ = token::delete_token(Some(TEST_PROFILE));
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_token_file_fallback_to_default() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+
+        let result = resolve_token(TokenStore::File, Some(TEST_PROFILE)).unwrap();
+        assert_eq!(result, "xoxb-default");
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_token_file_profile_takes_priority() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+        token::set_token(Some(TEST_PROFILE), "xoxb-profile").unwrap();
+
+        let result = resolve_token(TokenStore::File, Some(TEST_PROFILE)).unwrap();
+        assert_eq!(result, "xoxb-profile");
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_token_file_no_fallback_when_default_profile() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+
+        let result = resolve_token(TokenStore::File, None).unwrap();
+        assert_eq!(result, "xoxb-default");
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_token_file_error_when_no_token() {
+        cleanup_test_tokens();
+
+        let err = resolve_token(TokenStore::File, Some(TEST_PROFILE)).unwrap_err();
+        assert!(err.to_string().contains("token is not configured"));
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn describe_token_source_file_fallback_to_default() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+
+        let (backend, desc) = describe_token_source(TokenStore::File, Some(TEST_PROFILE)).unwrap();
+        assert_eq!(backend, "file");
+        assert!(
+            desc.contains("(default)"),
+            "expected '(default)' in: {desc}"
+        );
+
+        cleanup_test_tokens();
+    }
+
+    #[test]
+    #[serial]
+    fn describe_token_source_file_profile_takes_priority() {
+        cleanup_test_tokens();
+        token::set_token(None, "xoxb-default").unwrap();
+        token::set_token(Some(TEST_PROFILE), "xoxb-profile").unwrap();
+
+        let (backend, desc) = describe_token_source(TokenStore::File, Some(TEST_PROFILE)).unwrap();
+        assert_eq!(backend, "file");
+        assert!(
+            !desc.contains("(default)"),
+            "expected no '(default)' in: {desc}"
+        );
+
+        cleanup_test_tokens();
+    }
 }
