@@ -11,11 +11,11 @@ use clap::Parser;
 
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
+    let env = config::Env::load();
 
-    // Headless mode: all settings from environment variables
-    let headless = cli.headless || config::is_headless_env();
+    let headless = cli.headless || env.headless;
 
-    // Handle init and token before loading config (config may not exist yet)
+    // Handle commands that don't need a fully resolved Config
     match &cli.command {
         Some(cli::Command::Init) => {
             if headless {
@@ -27,52 +27,40 @@ fn main() -> Result<()> {
             if headless {
                 bail!("token is not available in headless mode");
             }
-            let profile = cli
-                .profile
-                .or_else(|| std::env::var("SLAFLING_PROFILE").ok());
-            return run_token(action, profile.as_deref());
+            let profile = cli.profile.as_deref().or(env.profile.as_deref());
+            return run_token(action, profile);
+        }
+        Some(cli::Command::Validate) => {
+            if headless {
+                bail!("validate has no effect in headless mode");
+            }
+            let path = config::config_path()?;
+            config::load_config()?;
+            println!("{}: ok", path.display());
+            return Ok(());
         }
         _ => {}
     }
 
-    if headless {
-        if cli.profile.is_some() || std::env::var("SLAFLING_PROFILE").ok().is_some() {
+    let config = if headless {
+        if cli.profile.is_some() || env.profile.is_some() {
             eprintln!("warning: --profile is ignored in headless mode");
         }
-        return run_headless(cli.command, cli.send);
-    }
-
-    let cfg = config::load_config()?;
-
-    let profile = cli
-        .profile
-        .or_else(|| std::env::var("SLAFLING_PROFILE").ok());
+        config::Config::new(None, None, &env)?
+    } else {
+        let file = config::load_config()?;
+        let profile = cli.profile.as_deref().or(env.profile.as_deref());
+        config::Config::new(Some(&file), profile, &env)?
+    };
 
     match cli.command {
-        Some(cli::Command::Init) => unreachable!(),
-        Some(cli::Command::Token { .. }) => unreachable!(),
-        Some(cli::Command::Validate) => {
-            let path = config::config_path()?;
-            println!("{}: ok", path.display());
-            Ok(())
-        }
         Some(cli::Command::Search {
             query,
             output,
             types,
-        }) => {
-            let types_str = match types {
-                Some(t) => cli::search_types_to_api_string(&t),
-                None => {
-                    let s = config::resolve_search_types(&cfg, profile.as_deref())
-                        .unwrap_or_else(|| "public_channel".to_string());
-                    config::validate_search_types_str(&s)?;
-                    s
-                }
-            };
-            run_search(profile.as_deref(), &query, output, &types_str, &cfg)
-        }
-        None => run_send(profile.as_deref(), cli.send, &cfg),
+        }) => run_search(&config, &query, output, types),
+        None => run_send(&config, cli.send),
+        _ => unreachable!(),
     }
 }
 
@@ -97,50 +85,17 @@ fn run_init() -> Result<()> {
     let token_value = prompt_token("init")?;
 
     // Store token using platform default (config doesn't exist yet)
-    store_token(config::default_token_store(), None, &token_value)?;
+    store_token(
+        config::TokenStore::default_for_platform(),
+        None,
+        &token_value,
+    )?;
 
     // Write config without token
     config::write_init_config(&path)?;
 
     println!("created {}", path.display());
     Ok(())
-}
-
-fn run_headless(command: Option<cli::Command>, send: cli::SendArgs) -> Result<()> {
-    match command {
-        Some(cli::Command::Init) | Some(cli::Command::Token { .. }) => unreachable!(),
-        Some(cli::Command::Validate) => {
-            bail!("validate has no effect in headless mode");
-        }
-        Some(cli::Command::Search {
-            query,
-            output,
-            types,
-        }) => {
-            let token = config::resolve_token_from_env()?;
-            let types_str = match types {
-                Some(t) => cli::search_types_to_api_string(&t),
-                None => {
-                    let s = config::resolve_search_types_from_env()
-                        .unwrap_or_else(|| "public_channel".to_string());
-                    config::validate_search_types_str(&s)?;
-                    s
-                }
-            };
-            let env_output = std::env::var("SLAFLING_OUTPUT")
-                .ok()
-                .filter(|s| !s.is_empty());
-            if let Some(ref s) = env_output {
-                config::validate_output_str(s)?;
-            }
-            let format = resolve_output_format(output, env_output);
-            run_search_with_token(&token, &query, format, &types_str)
-        }
-        None => {
-            let resolved = config::resolve_from_env()?;
-            run_send_with_resolved(send, &resolved)
-        }
-    }
 }
 
 fn confirm_yes_no(prompt: &str) -> Result<bool> {
@@ -167,28 +122,31 @@ fn prompt_token(command: &str) -> Result<String> {
     Ok(value)
 }
 
-fn store_token(token_store: &str, profile: Option<&str>, token_value: &str) -> Result<()> {
+fn store_token(
+    token_store: config::TokenStore,
+    profile: Option<&str>,
+    token_value: &str,
+) -> Result<()> {
     match token_store {
-        "keychain" => {
+        config::TokenStore::Keychain => {
             keychain::set_token(profile, token_value)?;
             let account = profile.unwrap_or("default");
             eprintln!("token stored in Keychain (account: {account})");
         }
-        "file" => {
+        config::TokenStore::File => {
             token::set_token(profile, token_value)?;
             let path = token::token_path(profile)?;
             eprintln!("token stored in {}", path.display());
         }
-        _ => bail!("invalid token_store '{token_store}'"),
     }
     Ok(())
 }
 
 /// Load token_store from config file, falling back to platform default if config doesn't exist.
-fn load_token_store() -> Result<String> {
+fn load_token_store() -> Result<config::TokenStore> {
     let path = config::config_path()?;
     if !path.exists() {
-        return Ok(config::default_token_store().to_string());
+        return Ok(config::TokenStore::default_for_platform());
     }
     let cfg = config::load_config()?;
     Ok(config::resolve_token_store(&cfg))
@@ -205,15 +163,15 @@ fn run_token(action: &cli::TokenAction, profile: Option<&str>) -> Result<()> {
 fn run_token_set(profile: Option<&str>) -> Result<()> {
     let token_value = prompt_token("token set")?;
     let token_store = load_token_store()?;
-    store_token(&token_store, profile, &token_value)?;
+    store_token(token_store, profile, &token_value)?;
     Ok(())
 }
 
 fn run_token_delete(profile: Option<&str>) -> Result<()> {
     let token_store = load_token_store()?;
 
-    match token_store.as_str() {
-        "keychain" => {
+    match token_store {
+        config::TokenStore::Keychain => {
             let account = profile.unwrap_or("default");
             if keychain::get_token(profile)?.is_none() {
                 bail!("no stored token found for profile '{account}'");
@@ -221,7 +179,7 @@ fn run_token_delete(profile: Option<&str>) -> Result<()> {
             keychain::delete_token(profile)?;
             eprintln!("deleted token from Keychain (account: {account})");
         }
-        "file" => {
+        config::TokenStore::File => {
             let path = token::token_path(profile)?;
             if !path.exists() {
                 let name = profile.unwrap_or("default");
@@ -230,7 +188,6 @@ fn run_token_delete(profile: Option<&str>) -> Result<()> {
             token::delete_token(profile)?;
             eprintln!("deleted {}", path.display());
         }
-        _ => bail!("invalid token_store '{token_store}'"),
     }
 
     Ok(())
@@ -238,41 +195,35 @@ fn run_token_delete(profile: Option<&str>) -> Result<()> {
 
 fn run_token_show(profile: Option<&str>) -> Result<()> {
     let token_store = load_token_store()?;
-    match config::describe_token_source(&token_store, profile) {
-        Ok((source, location)) => {
-            println!("source: {source}");
-            println!("location: {location}");
-        }
-        Err(e) => {
-            println!("not configured: {e}");
-        }
-    }
+    let (source, location) = config::describe_token_source(token_store, profile)?;
+    println!("source: {source}");
+    println!("location: {location}");
     Ok(())
 }
 
 fn run_search(
-    profile: Option<&str>,
+    config: &config::Config,
     query: &str,
     cli_output: Option<cli::OutputFormat>,
-    types: &str,
-    cfg: &config::ConfigFile,
+    types: Option<Vec<cli::ChannelType>>,
 ) -> Result<()> {
-    let token_store = config::resolve_token_store(cfg);
-    let token = config::resolve_token(&token_store, profile)?;
-    let fallback_output = config::resolve_output(cfg, profile);
-    if let Some(ref s) = fallback_output {
-        config::validate_output_str(s)?;
-    }
-    let format = resolve_output_format(cli_output, fallback_output);
+    let token = config.resolve_token()?;
+    let types = types.unwrap_or_else(|| {
+        config
+            .search_types
+            .clone()
+            .unwrap_or_else(|| vec![cli::ChannelType::PublicChannel])
+    });
+    let format = resolve_output_format(cli_output, config.output);
 
-    run_search_with_token(&token, query, format, types)
+    run_search_with_token(&token, query, format, &types)
 }
 
 fn run_search_with_token(
     token: &str,
     query: &str,
     format: cli::OutputFormat,
-    types: &str,
+    types: &[cli::ChannelType],
 ) -> Result<()> {
     let channels = slack::search_channels(token, query, types)?;
 
@@ -292,21 +243,16 @@ fn run_search_with_token(
 
 fn resolve_output_format(
     cli_output: Option<cli::OutputFormat>,
-    fallback_output: Option<String>,
+    config_output: Option<cli::OutputFormat>,
 ) -> cli::OutputFormat {
     // 1. CLI flag
     if let Some(f) = cli_output {
         return f;
     }
 
-    // 2. env var / config value
-    if let Some(s) = fallback_output {
-        match s.to_lowercase().as_str() {
-            "table" => return cli::OutputFormat::Table,
-            "tsv" => return cli::OutputFormat::Tsv,
-            "json" => return cli::OutputFormat::Json,
-            _ => {}
-        }
+    // 2. config / env var value
+    if let Some(f) = config_output {
+        return f;
     }
 
     // 3. auto-detect
@@ -326,7 +272,7 @@ fn print_table(channels: &[slack::ChannelInfo]) {
         .max(4);
     let type_width = channels
         .iter()
-        .map(|c| c.channel_type.len())
+        .map(|c| c.channel_type.as_api_str().len())
         .max()
         .unwrap_or(4)
         .max(4);
@@ -347,7 +293,7 @@ fn print_table(channels: &[slack::ChannelInfo]) {
             println!(
                 "{:<name_width$}  {:<type_width$}  {:<13}  {}",
                 ch.name,
-                ch.channel_type,
+                ch.channel_type.as_api_str(),
                 ch.channel_id,
                 ch.user_id.as_deref().unwrap_or("")
             );
@@ -360,7 +306,9 @@ fn print_table(channels: &[slack::ChannelInfo]) {
         for ch in channels {
             println!(
                 "{:<name_width$}  {:<type_width$}  {}",
-                ch.name, ch.channel_type, ch.channel_id
+                ch.name,
+                ch.channel_type.as_api_str(),
+                ch.channel_id
             );
         }
     }
@@ -371,7 +319,7 @@ fn print_tsv(channels: &[slack::ChannelInfo]) {
         println!(
             "{}\t{}\t{}\t{}",
             ch.name,
-            ch.channel_type,
+            ch.channel_type.as_api_str(),
             ch.channel_id,
             ch.user_id.as_deref().unwrap_or("")
         );
@@ -385,8 +333,8 @@ fn print_json(channels: &[slack::ChannelInfo]) -> Result<()> {
     Ok(())
 }
 
-fn run_send(profile: Option<&str>, send: cli::SendArgs, cfg: &config::ConfigFile) -> Result<()> {
-    let resolved = config::resolve(cfg, profile)?;
+fn run_send(config: &config::Config, send: cli::SendArgs) -> Result<()> {
+    let resolved = config.resolve_send()?;
     run_send_with_resolved(send, &resolved)
 }
 
@@ -401,7 +349,10 @@ fn run_send_with_resolved(send: cli::SendArgs, resolved: &config::ResolvedConfig
             bail!("no input provided (use -t, -f, or pipe via stdin)");
         }
         let mut buf = String::new();
-        stdin.lock().read_to_string(&mut buf)?;
+        stdin
+            .lock()
+            .read_to_string(&mut buf)
+            .context("failed to read from stdin")?;
         buf.truncate(buf.trim_end().len());
         (Some(buf), None)
     } else {
@@ -419,7 +370,10 @@ fn run_send_with_resolved(send: cli::SendArgs, resolved: &config::ResolvedConfig
                     bail!("--file requires stdin input but stdin is a terminal");
                 }
                 let mut buf = Vec::new();
-                stdin.lock().read_to_end(&mut buf)?;
+                stdin
+                    .lock()
+                    .read_to_end(&mut buf)
+                    .context("failed to read from stdin")?;
                 Some((send.filename.clone(), buf))
             }
             Some(path) => {
@@ -446,7 +400,10 @@ fn run_send_with_resolved(send: cli::SendArgs, resolved: &config::ResolvedConfig
                     bail!("--text requires stdin input but stdin is a terminal");
                 }
                 let mut buf = String::new();
-                stdin.lock().read_to_string(&mut buf)?;
+                stdin
+                    .lock()
+                    .read_to_string(&mut buf)
+                    .context("failed to read from stdin")?;
                 buf.truncate(buf.trim_end().len());
                 Some(buf)
             }
@@ -515,35 +472,29 @@ mod tests {
 
     #[test]
     fn resolve_output_format_cli_flag_wins() {
-        let result =
-            resolve_output_format(Some(cli::OutputFormat::Json), Some("table".to_string()));
+        let result = resolve_output_format(
+            Some(cli::OutputFormat::Json),
+            Some(cli::OutputFormat::Table),
+        );
         assert!(matches!(result, cli::OutputFormat::Json));
     }
 
     #[test]
     fn resolve_output_format_fallback_table() {
-        let result = resolve_output_format(None, Some("table".to_string()));
+        let result = resolve_output_format(None, Some(cli::OutputFormat::Table));
         assert!(matches!(result, cli::OutputFormat::Table));
     }
 
     #[test]
     fn resolve_output_format_fallback_tsv() {
-        let result = resolve_output_format(None, Some("tsv".to_string()));
+        let result = resolve_output_format(None, Some(cli::OutputFormat::Tsv));
         assert!(matches!(result, cli::OutputFormat::Tsv));
     }
 
     #[test]
     fn resolve_output_format_fallback_json() {
-        let result = resolve_output_format(None, Some("json".to_string()));
+        let result = resolve_output_format(None, Some(cli::OutputFormat::Json));
         assert!(matches!(result, cli::OutputFormat::Json));
-    }
-
-    #[test]
-    fn resolve_output_format_fallback_case_insensitive() {
-        let result = resolve_output_format(None, Some("JSON".to_string()));
-        assert!(matches!(result, cli::OutputFormat::Json));
-        let result = resolve_output_format(None, Some("Table".to_string()));
-        assert!(matches!(result, cli::OutputFormat::Table));
     }
 
     #[test]

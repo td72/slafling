@@ -1,4 +1,6 @@
+use anyhow::bail;
 use clap::{Parser, Subcommand, ValueEnum};
+use serde::Serialize;
 
 /// Fling messages to Slack
 #[derive(Parser)]
@@ -57,7 +59,7 @@ pub enum Command {
 
         /// Channel types to search
         #[arg(long, value_delimiter = ',')]
-        types: Option<Vec<SearchType>>,
+        types: Option<Vec<ChannelType>>,
     },
 
     /// Manage token storage
@@ -79,16 +81,17 @@ pub enum TokenAction {
     Show,
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
 #[value(rename_all = "snake_case")]
-pub enum SearchType {
+pub enum ChannelType {
     PublicChannel,
     PrivateChannel,
     Im,
     Mpim,
 }
 
-impl SearchType {
+impl ChannelType {
     pub fn as_api_str(self) -> &'static str {
         match self {
             Self::PublicChannel => "public_channel",
@@ -99,7 +102,7 @@ impl SearchType {
     }
 }
 
-pub fn search_types_to_api_string(types: &[SearchType]) -> String {
+pub fn channel_types_to_api_string(types: &[ChannelType]) -> String {
     types
         .iter()
         .map(|t| t.as_api_str())
@@ -107,11 +110,45 @@ pub fn search_types_to_api_string(types: &[SearchType]) -> String {
         .join(",")
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, ValueEnum)]
 pub enum OutputFormat {
     Table,
     Tsv,
     Json,
+}
+
+pub fn parse_channel_types_str(s: &str) -> anyhow::Result<Vec<ChannelType>> {
+    s.split(',').map(|t| t.trim().parse()).collect()
+}
+
+impl std::str::FromStr for OutputFormat {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        match s.to_lowercase().as_str() {
+            "table" => Ok(Self::Table),
+            "tsv" => Ok(Self::Tsv),
+            "json" => Ok(Self::Json),
+            _ => bail!("invalid output '{}' (valid: table, tsv, json)", s),
+        }
+    }
+}
+
+impl std::str::FromStr for ChannelType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        match s.to_lowercase().as_str() {
+            "public_channel" => Ok(Self::PublicChannel),
+            "private_channel" => Ok(Self::PrivateChannel),
+            "im" => Ok(Self::Im),
+            "mpim" => Ok(Self::Mpim),
+            _ => bail!(
+                "invalid search type '{}' (valid: public_channel, private_channel, im, mpim)",
+                s
+            ),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -119,35 +156,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn search_types_to_api_string_single() {
+    fn channel_types_to_api_string_single() {
         assert_eq!(
-            search_types_to_api_string(&[SearchType::PublicChannel]),
+            channel_types_to_api_string(&[ChannelType::PublicChannel]),
             "public_channel"
         );
     }
 
     #[test]
-    fn search_types_to_api_string_multiple() {
+    fn channel_types_to_api_string_multiple() {
         assert_eq!(
-            search_types_to_api_string(&[
-                SearchType::PublicChannel,
-                SearchType::PrivateChannel,
-                SearchType::Im,
-                SearchType::Mpim,
+            channel_types_to_api_string(&[
+                ChannelType::PublicChannel,
+                ChannelType::PrivateChannel,
+                ChannelType::Im,
+                ChannelType::Mpim,
             ]),
             "public_channel,private_channel,im,mpim"
         );
     }
 
     #[test]
-    fn search_types_to_api_string_empty() {
-        assert_eq!(search_types_to_api_string(&[]), "");
+    fn channel_types_to_api_string_empty() {
+        assert_eq!(channel_types_to_api_string(&[]), "");
     }
 
     #[test]
-    fn search_types_to_api_string_order_preserved() {
+    fn channel_types_to_api_string_order_preserved() {
         assert_eq!(
-            search_types_to_api_string(&[SearchType::Mpim, SearchType::Im]),
+            channel_types_to_api_string(&[ChannelType::Mpim, ChannelType::Im]),
             "mpim,im"
         );
     }

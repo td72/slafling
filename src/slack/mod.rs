@@ -1,5 +1,12 @@
-use anyhow::{bail, Context, Result};
+mod client;
+
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+
+use crate::cli::ChannelType;
+use client::{check_ok, slack_post, OkResponse};
+
+// --- chat.postMessage ---
 
 #[derive(Serialize)]
 struct PostMessageBody<'a> {
@@ -9,23 +16,14 @@ struct PostMessageBody<'a> {
 
 pub fn post_message(token: &str, channel: &str, text: &str) -> Result<()> {
     let body = PostMessageBody { channel, text };
-
-    let mut response = ureq::post("https://slack.com/api/chat.postMessage")
-        .header("Authorization", &format!("Bearer {token}"))
+    let mut resp = slack_post(token, "chat.postMessage")
         .send_json(&body)
-        .context("failed to call Slack API")?;
-
-    let json: serde_json::Value = response
+        .context("failed to call chat.postMessage")?;
+    let result: OkResponse = resp
         .body_mut()
         .read_json()
-        .context("failed to parse Slack API response")?;
-
-    if json.get("ok") != Some(&serde_json::Value::Bool(true)) {
-        let error = json["error"].as_str().unwrap_or("unknown error");
-        bail!("Slack API error: {error}");
-    }
-
-    Ok(())
+        .context("failed to parse chat.postMessage response")?;
+    check_ok(result.ok, result.error.as_deref(), "chat.postMessage")
 }
 
 // --- File upload (3-step) ---
@@ -38,29 +36,16 @@ struct GetUploadUrlResponse {
     file_id: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct CompleteUploadResponse {
-    ok: bool,
-    error: Option<String>,
-}
-
 fn get_upload_url(token: &str, filename: &str, length: u64) -> Result<(String, String)> {
     let length_str = length.to_string();
-    let mut resp = ureq::post("https://slack.com/api/files.getUploadURLExternal")
-        .header("Authorization", &format!("Bearer {token}"))
+    let mut resp = slack_post(token, "files.getUploadURLExternal")
         .send_form([("filename", filename), ("length", &length_str)])
         .context("failed to call files.getUploadURLExternal")?;
-
     let body: GetUploadUrlResponse = resp
         .body_mut()
         .read_json()
-        .context("failed to parse getUploadURLExternal response")?;
-
-    if !body.ok {
-        let error = body.error.as_deref().unwrap_or("unknown error");
-        bail!("Slack API error (getUploadURLExternal): {error}");
-    }
-
+        .context("failed to parse files.getUploadURLExternal response")?;
+    check_ok(body.ok, body.error.as_deref(), "files.getUploadURLExternal")?;
     let upload_url = body.upload_url.context("missing upload_url in response")?;
     let file_id = body.file_id.context("missing file_id in response")?;
     Ok((upload_url, file_id))
@@ -104,23 +89,18 @@ fn complete_upload(
         channel_id: Some(channel.to_string()),
         initial_comment: initial_comment.map(String::from),
     };
-
-    let mut resp = ureq::post("https://slack.com/api/files.completeUploadExternal")
-        .header("Authorization", &format!("Bearer {token}"))
+    let mut resp = slack_post(token, "files.completeUploadExternal")
         .send_json(&body)
         .context("failed to call files.completeUploadExternal")?;
-
-    let result: CompleteUploadResponse = resp
+    let result: OkResponse = resp
         .body_mut()
         .read_json()
-        .context("failed to parse completeUploadExternal response")?;
-
-    if !result.ok {
-        let error = result.error.as_deref().unwrap_or("unknown error");
-        bail!("Slack API error (completeUploadExternal): {error}");
-    }
-
-    Ok(())
+        .context("failed to parse files.completeUploadExternal response")?;
+    check_ok(
+        result.ok,
+        result.error.as_deref(),
+        "files.completeUploadExternal",
+    )
 }
 
 pub fn upload_file_bytes(
@@ -133,7 +113,6 @@ pub fn upload_file_bytes(
     let (upload_url, file_id) = get_upload_url(token, filename, data.len() as u64)?;
     upload_file_content(&upload_url, data)?;
     complete_upload(token, &file_id, filename, channel, initial_comment)?;
-
     Ok(())
 }
 
@@ -162,6 +141,20 @@ struct Channel {
     user: Option<String>,
 }
 
+impl Channel {
+    fn channel_type(&self) -> ChannelType {
+        if self.is_im {
+            ChannelType::Im
+        } else if self.is_mpim {
+            ChannelType::Mpim
+        } else if self.is_private {
+            ChannelType::PrivateChannel
+        } else {
+            ChannelType::PublicChannel
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct ResponseMetadata {
     next_cursor: Option<String>,
@@ -171,14 +164,19 @@ struct ResponseMetadata {
 pub struct ChannelInfo {
     pub name: String,
     #[serde(rename = "type")]
-    pub channel_type: String,
+    pub channel_type: ChannelType,
     pub channel_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
 }
 
-pub fn search_channels(token: &str, query: &str, types: &str) -> Result<Vec<ChannelInfo>> {
+pub fn search_channels(
+    token: &str,
+    query: &str,
+    types: &[ChannelType],
+) -> Result<Vec<ChannelInfo>> {
     let query_lower = query.to_lowercase();
+    let types_str = crate::cli::channel_types_to_api_string(types);
     let mut results = Vec::new();
     let mut cursor = String::new();
 
@@ -186,26 +184,20 @@ pub fn search_channels(token: &str, query: &str, types: &str) -> Result<Vec<Chan
         let mut params = vec![
             ("limit".to_string(), "200".to_string()),
             ("exclude_archived".to_string(), "true".to_string()),
-            ("types".to_string(), types.to_string()),
+            ("types".to_string(), types_str.clone()),
         ];
         if !cursor.is_empty() {
             params.push(("cursor".to_string(), cursor.clone()));
         }
 
-        let mut resp = ureq::post("https://slack.com/api/conversations.list")
-            .header("Authorization", &format!("Bearer {token}"))
+        let mut resp = slack_post(token, "conversations.list")
             .send_form(params)
             .context("failed to call conversations.list")?;
-
         let body: ConversationsListResponse = resp
             .body_mut()
             .read_json()
             .context("failed to parse conversations.list response")?;
-
-        if !body.ok {
-            let error = body.error.as_deref().unwrap_or("unknown error");
-            bail!("Slack API error (conversations.list): {error}");
-        }
+        check_ok(body.ok, body.error.as_deref(), "conversations.list")?;
 
         for ch in &body.channels {
             let display_name = ch
@@ -215,18 +207,9 @@ pub fn search_channels(token: &str, query: &str, types: &str) -> Result<Vec<Chan
                 .unwrap_or_else(|| ch.id.clone());
 
             if display_name.to_lowercase().contains(&query_lower) {
-                let channel_type = if ch.is_im {
-                    "im"
-                } else if ch.is_mpim {
-                    "mpim"
-                } else if ch.is_private {
-                    "private_channel"
-                } else {
-                    "public_channel"
-                };
                 results.push(ChannelInfo {
                     name: display_name,
-                    channel_type: channel_type.to_string(),
+                    channel_type: ch.channel_type(),
                     channel_id: ch.id.clone(),
                     user_id: ch.user.clone(),
                 });
