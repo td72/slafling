@@ -204,16 +204,27 @@ impl Config {
 }
 
 /// Resolve token from token_store backend (keychain or file).
+/// Falls back to default profile token when a named profile has no token.
 pub fn resolve_token(token_store: TokenStore, profile_name: Option<&str>) -> Result<String> {
     match token_store {
         TokenStore::Keychain => {
             if let Some(t) = keychain::get_token(profile_name)? {
                 return Ok(t);
             }
+            if profile_name.is_some() {
+                if let Some(t) = keychain::get_token(None)? {
+                    return Ok(t);
+                }
+            }
         }
         TokenStore::File => {
             if let Some(t) = token::get_token(profile_name)? {
                 return Ok(t);
+            }
+            if profile_name.is_some() {
+                if let Some(t) = token::get_token(None)? {
+                    return Ok(t);
+                }
             }
         }
     }
@@ -222,6 +233,7 @@ pub fn resolve_token(token_store: TokenStore, profile_name: Option<&str>) -> Res
 }
 
 /// Describe where the token is currently resolved from.
+/// Falls back to default profile token when a named profile has no token.
 pub fn describe_token_source(
     token_store: TokenStore,
     profile_name: Option<&str>,
@@ -231,11 +243,20 @@ pub fn describe_token_source(
             if keychain::get_token(profile_name)?.is_some() {
                 return Ok(("keychain", "macOS Keychain".to_string()));
             }
+            if profile_name.is_some() && keychain::get_token(None)?.is_some() {
+                return Ok(("keychain", "macOS Keychain (default)".to_string()));
+            }
         }
         TokenStore::File => {
             let path = token::token_path(profile_name)?;
             if token::get_token(profile_name)?.is_some() {
                 return Ok(("file", path.display().to_string()));
+            }
+            if profile_name.is_some() {
+                let default_path = token::token_path(None)?;
+                if token::get_token(None)?.is_some() {
+                    return Ok(("file", format!("{} (default)", default_path.display())));
+                }
             }
         }
     }
